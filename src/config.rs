@@ -10,6 +10,12 @@ pub struct Config {
     #[serde(default)]
     pub tls: Option<TlsConfig>,
 
+    #[serde(default)]
+    pub workers: Option<usize>,
+
+    #[serde(default)]
+    pub upstream_keepalive_pool: Option<usize>,
+
     #[serde(default = "default_max_request_body_buffer")]
     pub max_request_body_buffer: usize,
 

@@ -110,11 +110,24 @@ fn main() {
     let (upstream_host, upstream_port, upstream_tls) = parse_upstream(&config.upstream);
     info!(
         "Reverse proxy: {} -> {}:{} (tls={})",
-        config.listen, upstream_host, upstream_port, upstream_tls
+        config.listen, &upstream_host, upstream_port, upstream_tls
     );
 
     // Server
-    let mut server = Server::new(None).unwrap();
+    let mut conf = pingora::server::configuration::ServerConf::default();
+    conf.threads = config.workers.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+    });
+    if let Some(pool_size) = config.upstream_keepalive_pool {
+        conf.upstream_keepalive_pool_size = pool_size;
+    }
+    info!(
+        "Worker threads: {}, upstream keepalive pool: {}",
+        conf.threads, conf.upstream_keepalive_pool_size
+    );
+    let mut server = Server::new_with_opt_and_conf(None, conf);
     server.bootstrap();
 
     let handler = proxy::ReverseProxyHandler {
