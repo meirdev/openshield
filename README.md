@@ -51,6 +51,11 @@ metrics: # optional
   enabled: true
   listen: "127.0.0.1:9090"
 
+challenge: # optional
+  turnstile_site_key: "0x4AAAAAAA..."
+  turnstile_secret_key: "0x4AAAAAAA..."
+  cookie_secret: "your-random-secret-key"
+
 scores:
   - sqli
   - xss
@@ -138,7 +143,7 @@ Rules execute in order within each phase:
 | `allow`     | Skip remaining rules in phase            |
 | `log`       | Record to audit log, continue processing |
 | `score`     | Increment score counters                 |
-| `challenge` | Issue challenge to client                |
+| `challenge` | Issue Turnstile challenge (see below)    |
 
 ### Functions
 
@@ -209,6 +214,56 @@ Rules execute in order within each phase:
 `oss.waf.score.{name}` (dynamic, based on `scores` config)
 
 </details>
+
+## Challenge (Turnstile)
+
+When a rule triggers with `action: challenge`, OpenShield presents a [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/) widget to verify the client is human.
+
+### Flow
+
+1. Rule matches with `action: challenge`
+2. OpenShield checks for a valid `oss_challenge` cookie (HMAC-signed, bound to client IP)
+3. If valid — request passes through to upstream
+4. If not — serves the Turnstile challenge page (403)
+5. Client solves the widget — browser POSTs the token to the challenge endpoint
+6. OpenShield verifies the token with Cloudflare's siteverify API
+7. On success — sets signed cookie and redirects to the original URL
+8. On failure — shows the challenge again
+
+### Configuration
+
+```yaml
+challenge:
+  turnstile_site_key: "0x4AAAAAAA..."
+  turnstile_secret_key: "0x4AAAAAAA..."
+  cookie_secret: "your-random-secret-key"
+  cookie_ttl: 3600 # seconds (default: 3600)
+  cookie_name: "oss_challenge" # default
+  challenge_path: "/__openshield/challenge" # default
+  custom_page: ./challenge.html # optional
+```
+
+### Custom Challenge Page
+
+Provide your own HTML file via `custom_page`. The following placeholders are replaced:
+
+- `{{turnstile_site_key}}` — the Turnstile site key
+- `{{challenge_path}}` — the verification endpoint path
+
+The form must POST to `{{challenge_path}}` and include:
+
+- The Turnstile response field (`cf-turnstile-response`, added automatically by the widget)
+- A hidden `redirect` field with the original URL
+
+### Example Rule
+
+```yaml
+rules:
+  - id: challenge-suspicious
+    phase: request_headers
+    action: challenge
+    expression: "not ip.src in $allowed_ips"
+```
 
 ## Hot Reload
 

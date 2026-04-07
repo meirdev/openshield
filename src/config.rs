@@ -35,6 +35,9 @@ pub struct Config {
     pub lists: Vec<ListConfig>,
 
     #[serde(default)]
+    pub challenge: Option<ChallengeConfig>,
+
+    #[serde(default)]
     pub rules: Vec<RuleConfig>,
 }
 
@@ -153,6 +156,24 @@ pub struct ScoreAction {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct ChallengeConfig {
+    pub turnstile_site_key: String,
+    pub turnstile_secret_key: String,
+    pub cookie_secret: String,
+    #[serde(default = "default_challenge_cookie_ttl")]
+    pub cookie_ttl: u64,
+    #[serde(default = "default_challenge_cookie_name")]
+    pub cookie_name: String,
+    #[serde(default = "default_challenge_path")]
+    pub challenge_path: String,
+    /// Path to custom HTML challenge page. The page must contain
+    /// `{{turnstile_site_key}}` placeholder which will be replaced with the
+    /// actual site key.
+    #[serde(default)]
+    pub custom_page: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct RateLimitConfig {
     #[serde(default)]
     pub characteristics: Vec<String>,
@@ -176,6 +197,15 @@ fn default_true() -> bool {
 }
 fn default_metrics_listen() -> String {
     "127.0.0.1:9090".into()
+}
+fn default_challenge_cookie_ttl() -> u64 {
+    3600
+}
+fn default_challenge_cookie_name() -> String {
+    "oss_challenge".into()
+}
+fn default_challenge_path() -> String {
+    "/__openshield/challenge".into()
 }
 fn default_list_kind() -> String {
     "ip".into()
@@ -211,6 +241,15 @@ impl Config {
             }
             if rule.expression.is_empty() {
                 return Err(format!("rule '{}' has empty expression", rule.id).into());
+            }
+            if let Action::Challenge = rule.action {
+                if self.challenge.is_none() {
+                    return Err(format!(
+                        "rule '{}' has action 'challenge' but no challenge config",
+                        rule.id
+                    )
+                    .into());
+                }
             }
             if let Action::Score = rule.action {
                 let has_scores = rule

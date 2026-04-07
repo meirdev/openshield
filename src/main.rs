@@ -1,6 +1,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+mod challenge;
 mod compiler;
 mod config;
 mod geoip;
@@ -99,6 +100,12 @@ fn main() {
         config.logging.access_log, config.logging.audit_log, config.logging.format
     );
 
+    // Challenge
+    let challenge = config.challenge.as_ref().map(|cfg| {
+        info!("Challenge page enabled (Turnstile)");
+        Arc::new(challenge::ChallengeManager::new(cfg))
+    });
+
     // Upstream
     let (upstream_host, upstream_port, upstream_tls) = parse_upstream(&config.upstream);
     info!(
@@ -122,6 +129,7 @@ fn main() {
         max_response_body_buffer: config.max_response_body_buffer,
         ip_lists: ip_lists.clone(),
         bytes_lists: bytes_lists.clone(),
+        challenge,
         logger,
     };
 

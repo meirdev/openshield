@@ -13,6 +13,7 @@ use metrics::{ACTIVE_CONNECTIONS, BYTES_RECEIVED, BYTES_SENT, TOTAL_REQUESTS};
 use pingora::prelude::*;
 use pingora::proxy::{ProxyHttp, Session};
 
+use crate::challenge::ChallengeManager;
 use crate::geoip::GeoIp;
 use crate::logging::{
     AccessLogEntry, AuditLogEntry, AuditRequest, AuditResponse, Logger, MatchedRule,
@@ -34,6 +35,7 @@ pub struct ReverseProxyHandler {
     pub max_response_body_buffer: usize,
     pub ip_lists: Arc<RwLock<IpListMatcher>>,
     pub bytes_lists: Arc<RwLock<BytesListMatcher>>,
+    pub challenge: Option<Arc<ChallengeManager>>,
     pub logger: Arc<Logger>,
 }
 
@@ -216,10 +218,85 @@ async fn send_block_response(
         .await;
 }
 
+async fn send_challenge_page(session: &mut Session, cm: &ChallengeManager) {
+    let body = cm.challenge_page().as_bytes();
+    let mut resp =
+        pingora::http::ResponseHeader::build(http::StatusCode::FORBIDDEN, Some(3)).unwrap();
+    let _ = resp.insert_header("Content-Type", "text/html; charset=utf-8");
+    let _ = resp.insert_header("Content-Length", body.len().to_string());
+    let _ = resp.insert_header("Cache-Control", "no-store");
+    let _ = session.write_response_header(Box::new(resp), false).await;
+    let _ = session
+        .write_response_body(Some(bytes::Bytes::copy_from_slice(body)), true)
+        .await;
+}
+
 fn client_ip(session: &Session) -> Option<IpAddr> {
     session
         .client_addr()
         .and_then(|a| a.as_inet().map(|s| s.ip()))
+}
+
+impl ReverseProxyHandler {
+    async fn handle_challenge_verify(
+        &self,
+        session: &mut Session,
+        ctx: &mut RequestCtx,
+        cm: &ChallengeManager,
+    ) -> Result<bool> {
+        // Read the POST body to get the Turnstile token
+        let mut body_buf = Vec::new();
+        loop {
+            let body = session.read_request_body().await?;
+            match body {
+                Some(data) => {
+                    body_buf.extend_from_slice(&data);
+                    if body_buf.len() > 8192 {
+                        break;
+                    }
+                }
+                None => break,
+            }
+        }
+
+        let params: Vec<(String, String)> = form_urlencoded::parse(&body_buf)
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+
+        let token = params
+            .iter()
+            .find(|(k, _)| k == "cf-turnstile-response")
+            .map(|(_, v)| v.as_str());
+        let redirect = params
+            .iter()
+            .find(|(k, _)| k == "redirect")
+            .map(|(_, v)| v.as_str());
+
+        let client_ip_str = client_ip(session)
+            .map(|ip| ip.to_string())
+            .unwrap_or_default();
+
+        if let Some(token) = token {
+            if cm.verify_turnstile(token, &client_ip_str).await {
+                // Verification passed — set cookie and redirect
+                let cookie = cm.create_cookie(&client_ip_str);
+                let location = redirect.unwrap_or("/");
+                let mut resp =
+                    pingora::http::ResponseHeader::build(http::StatusCode::FOUND, Some(3)).unwrap();
+                let _ = resp.insert_header("Location", location);
+                let _ = resp.insert_header("Set-Cookie", &cookie);
+                let _ = resp.insert_header("Cache-Control", "no-store");
+                let _ = session.write_response_header(Box::new(resp), true).await;
+                ctx.waf_blocked = true;
+                return Ok(true);
+            }
+        }
+
+        // Verification failed — show challenge again
+        send_challenge_page(session, cm).await;
+        ctx.waf_blocked = true;
+        Ok(true)
+    }
 }
 
 #[async_trait]
@@ -266,6 +343,14 @@ impl ProxyHttp for ReverseProxyHandler {
     }
 
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
+        // Handle challenge verification POST
+        if let Some(ref cm) = self.challenge {
+            let req = session.req_header();
+            if req.method == http::Method::POST && req.uri.path() == cm.challenge_path() {
+                return self.handle_challenge_verify(session, ctx, cm).await;
+            }
+        }
+
         if let Some(ip) = client_ip(session) {
             let geoip = self.geoip.read().unwrap();
             if let Some(ref g) = *geoip {
@@ -306,7 +391,24 @@ impl ProxyHttp for ReverseProxyHandler {
                 return Ok(true);
             }
             RuleAction::Allow { .. } => return Ok(false),
-            _ => {}
+            RuleAction::Challenge { .. } => {
+                if let Some(ref cm) = self.challenge {
+                    let client_ip_str = client_ip(session)
+                        .map(|ip| ip.to_string())
+                        .unwrap_or_default();
+                    let cookie_header = session
+                        .req_header()
+                        .headers
+                        .get("cookie")
+                        .and_then(|v| v.to_str().ok());
+                    if !cm.is_verified(cookie_header, &client_ip_str) {
+                        send_challenge_page(session, cm).await;
+                        ctx.waf_blocked = true;
+                        return Ok(true);
+                    }
+                }
+            }
+            RuleAction::NoMatch => {}
         }
 
         Ok(false)
