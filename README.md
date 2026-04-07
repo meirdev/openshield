@@ -1,7 +1,7 @@
 # OpenShield
 
-<div align="center" style="margin-bottom: 20px;">
-  <img src="./assets/logo.png" alt="OpenShield Logo" width="200"/>
+<div align="center" style="margin-bottom: 50px;">
+  <img src="./assets/logo.png" alt="OpenShield Logo" width="500"/>
 </div>
 
 High-performance reverse proxy with Web Application Firewall (WAF) capabilities, built on [Cloudflare Pingora](https://github.com/cloudflare/pingora) and [Cloudflare Wirefilter](https://github.com/cloudflare/wirefilter).
