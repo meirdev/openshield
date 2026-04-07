@@ -311,4 +311,4 @@ The logging system supports custom sinks and formatters via the `LogSink` and `F
 
 ## Metrics
 
-Prometheus metrics available at `http://127.0.0.1:9090/metrics` (configurable).
+Prometheus metrics available at `/metrics` (configurable).
