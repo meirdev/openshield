@@ -13,6 +13,12 @@ pub struct Config {
     #[serde(default)]
     pub workers: Option<usize>,
 
+    #[serde(default = "default_pid_file")]
+    pub pid_file: String,
+
+    #[serde(default = "default_upgrade_sock")]
+    pub upgrade_sock: String,
+
     #[serde(default)]
     pub upstream_keepalive_pool: Option<usize>,
 
@@ -203,6 +209,12 @@ fn default_true() -> bool {
 }
 fn default_metrics_listen() -> String {
     "127.0.0.1:9090".into()
+}
+fn default_pid_file() -> String {
+    "/tmp/openshield.pid".into()
+}
+fn default_upgrade_sock() -> String {
+    "/tmp/openshield_upgrade.sock".into()
 }
 fn default_challenge_cookie_ttl() -> u64 {
     3600

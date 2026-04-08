@@ -1,72 +1,43 @@
-use std::sync::{Arc, RwLock};
+use std::path::PathBuf;
 
-use log::{error, info, warn};
-use wirefilter_engine::Scheme;
+use log::{error, info};
 
-use crate::config::Config;
-use crate::geoip::GeoIp;
-use crate::waf::engine::Engine;
-use crate::waf::lists::{BytesListMatcher, IpListMatcher};
-use crate::waf::ratelimit::RateLimitManager;
-
-/// Listen for SIGHUP and reload config, rules, lists, and GeoIP databases.
-pub fn start_reload_listener(
-    config_path: std::path::PathBuf,
-    scheme: Arc<Scheme>,
-    engine: Arc<RwLock<Engine>>,
-    ip_lists: Arc<RwLock<IpListMatcher>>,
-    bytes_lists: Arc<RwLock<BytesListMatcher>>,
-    geoip: Arc<RwLock<Option<GeoIp>>>,
-) {
+/// Listen for SIGHUP and perform a graceful upgrade:
+/// 1. Spawn new process with `--upgrade` flag
+/// 2. Send SIGQUIT to ourselves to trigger pingora's FD transfer
+/// 3. Pingora sends listening sockets to new process, then drains and exits
+pub fn start_reload_listener(config_path: PathBuf) {
     std::thread::spawn(move || {
         use signal_hook::iterator::Signals;
         let mut signals =
             Signals::new([signal_hook::consts::SIGHUP]).expect("Failed to register SIGHUP handler");
 
-        info!("Send SIGHUP to reload config");
+        info!("Send SIGHUP to reload (graceful upgrade)");
+
+        let exe = std::env::current_exe().expect("Failed to get current executable path");
+        let my_pid = std::process::id();
 
         for _ in signals.forever() {
-            info!("SIGHUP received, reloading...");
-            match Config::load(&config_path) {
-                Ok(new_config) => {
-                    // Reload rules (preserve rate limit counters)
-                    let existing_mgr = {
-                        let mut eng = engine.write().unwrap();
-                        Some(std::mem::replace(
-                            &mut eng.ratelimit_mgr,
-                            RateLimitManager::new(),
-                        ))
-                    };
-                    match crate::compiler::compile(&new_config, &scheme, existing_mgr) {
-                        Ok(new_engine) => {
-                            let mut eng = engine.write().unwrap();
-                            *eng = new_engine;
-                            info!("Rules reloaded: {} rules", eng.rule_count());
-                        }
-                        Err(e) => error!("Failed to compile rules: {}", e),
-                    }
+            info!("SIGHUP received, starting graceful upgrade...");
 
-                    // Reload lists
-                    let (new_ip, new_bytes) =
-                        crate::waf::lists::build_from_config(&new_config.lists);
-                    *ip_lists.write().unwrap() = new_ip;
-                    *bytes_lists.write().unwrap() = new_bytes;
-                    info!("Lists reloaded");
-
-                    // Reload GeoIP databases
-                    if let Some(ref geo_cfg) = new_config.geoip {
-                        match GeoIp::open(&geo_cfg.city_mmdb, &geo_cfg.asn_mmdb) {
-                            Ok(new_geoip) => {
-                                *geoip.write().unwrap() = Some(new_geoip);
-                                info!("GeoIP databases reloaded");
-                            }
-                            Err(e) => warn!("Failed to reload GeoIP databases: {}", e),
-                        }
-                    } else {
-                        *geoip.write().unwrap() = None;
+            // Spawn new process with --upgrade flag
+            match std::process::Command::new(&exe)
+                .arg("--config")
+                .arg(&config_path)
+                .arg("--upgrade")
+                .spawn()
+            {
+                Ok(child) => {
+                    info!(
+                        "New process spawned (pid={}), sending SIGQUIT to self",
+                        child.id()
+                    );
+                    // Tell pingora to transfer FDs and gracefully shut down
+                    unsafe {
+                        libc::kill(my_pid as i32, libc::SIGQUIT);
                     }
                 }
-                Err(e) => error!("Failed to load config: {}", e),
+                Err(e) => error!("Failed to spawn upgrade process: {}", e),
             }
         }
     });

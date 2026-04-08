@@ -4,7 +4,7 @@ pub mod metrics;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -27,14 +27,14 @@ pub struct ReverseProxyHandler {
     pub upstream_tls: bool,
     pub upstream_host: String,
     pub upstream_port: u16,
-    pub geoip: Arc<RwLock<Option<GeoIp>>>,
+    pub geoip: Option<GeoIp>,
     pub scheme: Arc<wirefilter_engine::Scheme>,
-    pub engine: Arc<RwLock<Engine>>,
+    pub engine: Engine,
     pub max_request_body_buffer: usize,
     pub inspect_response_body: bool,
     pub max_response_body_buffer: usize,
-    pub ip_lists: Arc<RwLock<IpListMatcher>>,
-    pub bytes_lists: Arc<RwLock<BytesListMatcher>>,
+    pub ip_lists: Arc<IpListMatcher>,
+    pub bytes_lists: Arc<BytesListMatcher>,
     pub challenge: Option<Arc<ChallengeManager>>,
     pub logger: Arc<Logger>,
 }
@@ -45,8 +45,7 @@ fn evaluate_phase(
     phase: &Phase,
 ) -> RuleAction {
     crate::waf::engine::sync_scores(&mut ctx.exec_ctx, &handler.scheme, &ctx.waf_scores);
-    let engine = handler.engine.read().unwrap();
-    let action = engine.evaluate(
+    let action = handler.engine.evaluate(
         phase,
         &ctx.exec_ctx,
         &mut ctx.waf_scores,
@@ -318,7 +317,7 @@ impl ProxyHttp for ReverseProxyHandler {
                         .as_any_mut()
                         .downcast_mut::<IpListMatcher>()
                         .unwrap();
-                    *ip_matcher = self.ip_lists.read().unwrap().clone();
+                    *ip_matcher = (*self.ip_lists).clone();
                 }
                 if let Some(list_ref) = self.scheme.get_list(&wirefilter_engine::Type::Bytes) {
                     let matcher = ctx.get_list_matcher_mut(list_ref);
@@ -326,7 +325,7 @@ impl ProxyHttp for ReverseProxyHandler {
                         .as_any_mut()
                         .downcast_mut::<BytesListMatcher>()
                         .unwrap();
-                    *bytes_matcher = self.bytes_lists.read().unwrap().clone();
+                    *bytes_matcher = (*self.bytes_lists).clone();
                 }
                 ctx
             },
@@ -352,8 +351,7 @@ impl ProxyHttp for ReverseProxyHandler {
         }
 
         if let Some(ip) = client_ip(session) {
-            let geoip = self.geoip.read().unwrap();
-            if let Some(ref g) = *geoip {
+            if let Some(ref g) = self.geoip {
                 ctx.geo = Some(g.lookup(ip));
             }
         }

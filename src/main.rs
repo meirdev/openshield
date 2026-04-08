@@ -10,7 +10,7 @@ mod proxy;
 mod reload;
 mod waf;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use clap::Parser;
 use config::Config;
@@ -18,6 +18,7 @@ use log::{error, info};
 use pingora::apps::prometheus_http_app::PrometheusServer;
 use pingora::prelude::*;
 use pingora::proxy::http_proxy_service;
+use pingora::server::configuration::Opt as PingoraOpt;
 use pingora::services::listening::Service as ListeningService;
 
 #[derive(Parser)]
@@ -26,6 +27,14 @@ struct Cli {
     /// Path to config file
     #[arg(short = 'c', long = "config", default_value = "config.yaml")]
     config: std::path::PathBuf,
+
+    /// Upgrade from a running instance (receive listening sockets)
+    #[arg(short, long)]
+    upgrade: bool,
+
+    /// Test config and exit
+    #[arg(short, long)]
+    test: bool,
 }
 
 fn parse_upstream(addr: &str) -> (String, u16, bool) {
@@ -74,14 +83,16 @@ fn main() {
         );
         g
     });
-    let geoip = Arc::new(RwLock::new(geoip));
 
     // WAF scheme + engine
     let scheme = Arc::new(waf::scheme::build(&config.scores));
     info!("WAF scheme: {} fields", scheme.field_count());
 
     let engine = match compiler::compile(&config, &scheme, None) {
-        Ok(e) => Arc::new(RwLock::new(e)),
+        Ok(e) => {
+            info!("Rules compiled: {}", e.rule_count());
+            e
+        }
         Err(e) => {
             error!("Failed to compile rules: {}", e);
             std::process::exit(1);
@@ -90,8 +101,6 @@ fn main() {
 
     // Lists
     let (ip_lists, bytes_lists) = waf::lists::build_from_config(&config.lists);
-    let ip_lists = Arc::new(RwLock::new(ip_lists));
-    let bytes_lists = Arc::new(RwLock::new(bytes_lists));
 
     // Logger
     let logger = Arc::new(logging::Logger::new(&config.logging));
@@ -123,25 +132,35 @@ fn main() {
     if let Some(pool_size) = config.upstream_keepalive_pool {
         conf.upstream_keepalive_pool_size = pool_size;
     }
+    conf.pid_file = config.pid_file.clone();
+    conf.upgrade_sock = config.upgrade_sock.clone();
     info!(
         "Worker threads: {}, upstream keepalive pool: {}",
         conf.threads, conf.upstream_keepalive_pool_size
     );
-    let mut server = Server::new_with_opt_and_conf(None, conf);
+
+    let pingora_opt = PingoraOpt {
+        upgrade: cli.upgrade,
+        daemon: false,
+        nocapture: false,
+        test: cli.test,
+        conf: None,
+    };
+    let mut server = Server::new_with_opt_and_conf(Some(pingora_opt), conf);
     server.bootstrap();
 
     let handler = proxy::ReverseProxyHandler {
         upstream_tls,
         upstream_host,
         upstream_port,
-        geoip: geoip.clone(),
+        geoip,
         scheme: scheme.clone(),
-        engine: engine.clone(),
+        engine,
         max_request_body_buffer: config.max_request_body_buffer,
         inspect_response_body: config.inspect_response_body,
         max_response_body_buffer: config.max_response_body_buffer,
-        ip_lists: ip_lists.clone(),
-        bytes_lists: bytes_lists.clone(),
+        ip_lists: Arc::new(ip_lists),
+        bytes_lists: Arc::new(bytes_lists),
         challenge,
         logger,
     };
@@ -172,14 +191,7 @@ fn main() {
         }
     }
 
-    reload::start_reload_listener(
-        cli.config.clone(),
-        scheme,
-        engine,
-        ip_lists,
-        bytes_lists,
-        geoip,
-    );
+    reload::start_reload_listener(cli.config.clone());
 
     server.run_forever();
 }
