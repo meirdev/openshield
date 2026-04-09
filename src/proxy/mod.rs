@@ -24,6 +24,7 @@ use crate::waf::lists::{BytesListMatcher, IpListMatcher};
 use crate::waf::populate;
 
 pub struct ReverseProxyHandler {
+    pub detection_only: bool,
     pub upstream_tls: bool,
     pub upstream_host: String,
     pub upstream_port: u16,
@@ -74,7 +75,11 @@ fn evaluate_phase(
         RuleAction::NoMatch => {}
     }
 
-    action
+    if handler.detection_only {
+        RuleAction::NoMatch
+    } else {
+        action
+    }
 }
 
 fn extract_request_data(session: &Session, geo: &Option<crate::geoip::GeoIpLookup>) -> RequestData {

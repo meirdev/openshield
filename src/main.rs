@@ -149,7 +149,12 @@ fn main() {
     let mut server = Server::new_with_opt_and_conf(Some(pingora_opt), conf);
     server.bootstrap();
 
+    if config.detection_only {
+        info!("Detection-only mode: rules evaluate but no requests will be blocked");
+    }
+
     let handler = proxy::ReverseProxyHandler {
+        detection_only: config.detection_only,
         upstream_tls,
         upstream_host,
         upstream_port,

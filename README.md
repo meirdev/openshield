@@ -34,6 +34,7 @@ cargo build --release
 listen: "127.0.0.1:8080"
 upstream: "https://httpbin.org"
 workers: 4 # optional, defaults to number of CPUs
+detection_only: false # log matches without enforcing (default: false)
 
 max_request_body_buffer: 1048576 # 1MB
 inspect_response_body: false

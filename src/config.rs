@@ -11,6 +11,9 @@ pub struct Config {
     pub tls: Option<TlsConfig>,
 
     #[serde(default)]
+    pub detection_only: bool,
+
+    #[serde(default)]
     pub workers: Option<usize>,
 
     #[serde(default = "default_pid_file")]
