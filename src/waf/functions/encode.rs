@@ -8,22 +8,11 @@ pub fn base64_encode(input: &[u8]) -> Vec<u8> {
 }
 
 pub fn hex_encode(input: &[u8]) -> Vec<u8> {
-    let mut result = Vec::with_capacity(input.len() * 2);
-    for &b in input {
-        result.push(HEX_CHARS[(b >> 4) as usize]);
-        result.push(HEX_CHARS[(b & 0x0f) as usize]);
-    }
-    result
+    hex::encode(input).into_bytes()
 }
 
 pub fn sha1(input: &[u8]) -> Vec<u8> {
-    let hash = Sha1::digest(input);
-    let mut result = Vec::with_capacity(40);
-    for &b in hash.as_slice() {
-        result.push(HEX_CHARS[(b >> 4) as usize]);
-        result.push(HEX_CHARS[(b & 0x0f) as usize]);
-    }
-    result
+    hex::encode(Sha1::digest(input)).into_bytes()
 }
 
 pub fn utf8_to_unicode(input: &[u8]) -> Vec<u8> {
@@ -44,5 +33,3 @@ pub fn utf8_to_unicode(input: &[u8]) -> Vec<u8> {
     }
     result
 }
-
-const HEX_CHARS: [u8; 16] = *b"0123456789abcdef";

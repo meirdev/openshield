@@ -60,21 +60,7 @@ pub fn base64_decode(input: &[u8]) -> Vec<u8> {
 }
 
 pub fn hex_decode(input: &[u8]) -> Vec<u8> {
-    let mut result = Vec::with_capacity(input.len() / 2);
-    let mut i = 0;
-    while i + 1 < input.len() {
-        if input[i].is_ascii_hexdigit() && input[i + 1].is_ascii_hexdigit() {
-            result.push(hex2(input[i], input[i + 1]));
-            i += 2;
-        } else {
-            result.push(input[i]);
-            i += 1;
-        }
-    }
-    if i < input.len() {
-        result.push(input[i]);
-    }
-    result
+    hex::decode(input).unwrap_or_else(|_| input.to_vec())
 }
 
 pub fn html_entity_decode(input: &[u8]) -> Vec<u8> {
