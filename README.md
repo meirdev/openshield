@@ -156,19 +156,19 @@ Rules execute in order within each phase:
 
 **Transforms** (Bytes -> Bytes, also work on arrays):
 
-| Function                                   | Description                  |
-| ------------------------------------------ | ---------------------------- |
-| `lower`, `upper`                           | Case conversion              |
-| `trim`, `trim_start`, `trim_end`           | Whitespace trimming          |
-| `url_decode_uni`                           | URL decode (supports %uXXXX) |
-| `base64_decode`, `base64_encode`           | Base64                       |
-| `hex_decode`, `hex_encode`                 | Hex encoding                 |
-| `html_entity_decode`                       | HTML entity decode           |
-| `sha1`                                     | SHA1 hash (hex output)       |
-| `utf8_to_unicode`                          | UTF-8 to \uXXXX              |
-| `remove_nulls`, `replace_nulls`            | Null byte handling           |
-| `remove_whitespace`, `compress_whitespace` | Whitespace normalization     |
-| `replace_comments`, `remove_comments_char` | SQL comment handling         |
+| Function                                         | Description                         |
+| ------------------------------------------------ | ----------------------------------- |
+| `lower`, `upper`                                 | Case conversion                     |
+| `trim`, `trim_start`, `trim_end`                 | Whitespace trimming                 |
+| `url_decode_uni`                                 | URL decode (supports %uXXXX)        |
+| `base64_decode`, `base64_encode`                 | Base64                              |
+| `hex_decode`, `hex_encode`                       | Hex encoding                        |
+| `html_entity_decode`                             | HTML entity decode                  |
+| `sha1`                                           | SHA1 hash (hex output)              |
+| `utf8_to_unicode`                                | UTF-8 to \uXXXX                     |
+| `remove_nulls`, `replace_nulls`                  | Null byte handling                  |
+| `remove_whitespace`                              | Strip all ASCII whitespace          |
+| `regex_replace(field, "pattern", "replacement")` | Regex substitution (pattern cached) |
 
 **Detection** (Bytes -> Bool, also work on arrays):
 
@@ -179,12 +179,12 @@ Rules execute in order within each phase:
 
 **String** (non-polymorphic):
 
-| Function                          | Description                          |
-| --------------------------------- | ------------------------------------ |
-| `len(field)`                      | String length                        |
-| `starts_with(field, "prefix")`    | Prefix check                         |
-| `ends_with(field, "suffix")`      | Suffix check                         |
-| `regex_capture(field, "pattern")` | Regex capture groups (returns array) |
+| Function                          | Description                           |
+| --------------------------------- | ------------------------------------- |
+| `len(field)`                      | String length                         |
+| `starts_with(field, "prefix")`    | Prefix check                          |
+| `ends_with(field, "suffix")`      | Suffix check                          |
+| `regex_capture(field, "pattern")` | Regex capture groups (pattern cached) |
 
 **Built-in**:
 

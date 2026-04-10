@@ -47,21 +47,6 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
         BytesTransformFunction::new("remove_whitespace", string::remove_whitespace),
     )
     .unwrap();
-    b.add_function(
-        "compress_whitespace",
-        BytesTransformFunction::new("compress_whitespace", string::compress_whitespace),
-    )
-    .unwrap();
-    b.add_function(
-        "replace_comments",
-        BytesTransformFunction::new("replace_comments", string::replace_comments),
-    )
-    .unwrap();
-    b.add_function(
-        "remove_comments_char",
-        BytesTransformFunction::new("remove_comments_char", string::remove_comments_char),
-    )
-    .unwrap();
 
     // String functions (non-polymorphic)
     b.add_function("len", string::len_def()).unwrap();
@@ -130,7 +115,9 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
     )
     .unwrap();
 
-    // Regex
-    b.add_function("regex_capture", regex::regex_capture_def())
+    // Regex (patterns compiled once at rule-compile time)
+    b.add_function("regex_capture", regex::RegexCaptureFunction)
+        .unwrap();
+    b.add_function("regex_replace", regex::RegexReplaceFunction)
         .unwrap();
 }

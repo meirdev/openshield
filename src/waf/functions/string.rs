@@ -1,6 +1,3 @@
-use std::sync::LazyLock;
-
-use regex::bytes::Regex;
 use wirefilter_engine::{
     FunctionArgs, LhsValue, SimpleFunctionArgKind, SimpleFunctionDefinition, SimpleFunctionImpl,
     SimpleFunctionParam, Type,
@@ -62,21 +59,6 @@ pub fn remove_whitespace(input: &[u8]) -> Vec<u8> {
         .copied()
         .filter(|c| !c.is_ascii_whitespace())
         .collect()
-}
-
-pub fn compress_whitespace(input: &[u8]) -> Vec<u8> {
-    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\s]+").unwrap());
-    RE.replace_all(input, &b" "[..]).into_owned()
-}
-
-pub fn replace_comments(input: &[u8]) -> Vec<u8> {
-    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)/\*.*?\*/|/\*.*$").unwrap());
-    RE.replace_all(input, &b" "[..]).into_owned()
-}
-
-pub fn remove_comments_char(input: &[u8]) -> Vec<u8> {
-    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"/\*|\*/|--|#").unwrap());
-    RE.replace_all(input, &b""[..]).into_owned()
 }
 
 pub fn len_def() -> SimpleFunctionDefinition {
