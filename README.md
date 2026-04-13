@@ -149,6 +149,47 @@ Rules execute in order within each phase:
 | `score`     | Increment score counters                 |
 | `challenge` | Issue Turnstile challenge (see below)    |
 
+### Rate Limiting
+
+Any rule can include a `ratelimit` block to enforce per-key request limits:
+
+```yaml
+rules:
+  - id: rate-limit-api
+    phase: request_headers
+    action: block
+    expression: 'http.request.uri.path contains "/api/"'
+    ratelimit:
+      characteristics: [ip.src]
+      period: 60
+      requests_per_period: 100
+      mitigation_timeout: 120
+```
+
+| Parameter             | Type       | Description                                                                |
+| --------------------- | ---------- | -------------------------------------------------------------------------- |
+| `characteristics`     | `string[]` | Fields used to build the rate limit key (default: `[ip.src]`)              |
+| `period`              | `int`      | Window size in seconds                                                     |
+| `requests_per_period` | `int`      | Max requests allowed per key within the window                             |
+| `mitigation_timeout`  | `int`      | Seconds to keep blocking a key after it exceeds the limit (0 = no timeout) |
+
+**How it works:** requests are counted per key within a sliding window of `period` seconds. Once a key exceeds `requests_per_period`, the rule's action fires. If `mitigation_timeout` is set, the key stays blocked for that duration even if the window resets.
+
+**Characteristics** determine what makes each key unique. You can use any available field:
+
+```yaml
+# Per-IP (default)
+characteristics: [ip.src]
+
+# Per-IP per path
+characteristics: [ip.src, http.request.uri.path]
+
+# Per user-agent
+characteristics: [http.user_agent]
+```
+
+Rate limit counters are preserved across in-process config reloads (SIGHUP).
+
 ### Functions
 
 **Transforms**:
