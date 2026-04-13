@@ -13,13 +13,10 @@ High-performance reverse proxy with Web Application Firewall (WAF) capabilities,
 - Multi-phase request/response inspection (headers, body, response)
 - SQL injection and XSS detection via libinjection
 - GeoIP lookups (MaxMind)
-- Rate limiting with sliding windows
 - Score-based threat detection (accumulate across rules)
 - IP and string list matching
-- Hot config reload via SIGHUP (rules, lists, GeoIP databases)
 - Structured logging (JSON/text) with pluggable sinks
 - Prometheus metrics
-- TLS termination with HTTP/2
 
 ## Quick Start
 
@@ -154,7 +151,7 @@ Rules execute in order within each phase:
 
 ### Functions
 
-**Transforms** (Bytes -> Bytes, also work on arrays):
+**Transforms**:
 
 | Function                                         | Description                         |
 | ------------------------------------------------ | ----------------------------------- |
@@ -170,14 +167,14 @@ Rules execute in order within each phase:
 | `remove_whitespace`                              | Strip all ASCII whitespace          |
 | `regex_replace(field, "pattern", "replacement")` | Regex substitution (pattern cached) |
 
-**Detection** (Bytes -> Bool, also work on arrays):
+**Detection**:
 
 | Function      | Description                            |
 | ------------- | -------------------------------------- |
 | `detect_sqli` | SQL injection detection (libinjection) |
 | `detect_xss`  | XSS detection (libinjection)           |
 
-**String** (non-polymorphic):
+**String**:
 
 | Function                          | Description                           |
 | --------------------------------- | ------------------------------------- |
