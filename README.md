@@ -232,6 +232,14 @@ Rate limit counters are preserved across in-process config reloads (SIGHUP).
 | `all(array)`        | True if all elements are true |
 | `concat(a, b, ...)` | Concatenate strings           |
 
+**JSON**:
+
+| Function                                     | Description                                    |
+| -------------------------------------------- | ---------------------------------------------- |
+| `lookup_json_string(field, key1, key2, ...)` | Extract a value from a JSON string by key path |
+
+Keys can be string literals (object access) or integer literals (array index). Returns the value as a string, or empty string if not found.
+
 ### Fields
 
 <details>

@@ -2,6 +2,7 @@ mod decode;
 mod detect;
 mod encode;
 pub mod helpers;
+mod json;
 mod regex;
 mod string;
 
@@ -119,5 +120,9 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
     b.add_function("regex_capture", regex::RegexCaptureFunction)
         .unwrap();
     b.add_function("regex_replace", regex::RegexReplaceFunction)
+        .unwrap();
+
+    // JSON
+    b.add_function("lookup_json_string", json::LookupJsonStringFunction)
         .unwrap();
 }
