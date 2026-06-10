@@ -82,11 +82,11 @@ pub struct AuditLogEntry {
     pub request_id: String,
     pub timestamp: String,
     pub waf_action: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub waf_rule_id: Option<String>,
     pub waf_matched_rules: Vec<MatchedRule>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub waf_scores: HashMap<String, i64>,
+    #[serde(skip_serializing_if = "serde_json::Map::is_empty")]
+    pub waf_payloads: serde_json::Map<String, serde_json::Value>,
     pub request: AuditRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<AuditResponse>,

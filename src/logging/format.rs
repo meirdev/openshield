@@ -59,6 +59,9 @@ impl Formatter for TextFormatter {
                 .collect::<Vec<_>>()
                 .join(","),
         );
+        for (k, v) in &entry.waf_payloads {
+            buf.push_str(&format!("  payload.{k}: {v}\n"));
+        }
         for (k, v) in &entry.request.headers {
             buf.push_str(&format!("  req.{k}: {v}\n"));
         }

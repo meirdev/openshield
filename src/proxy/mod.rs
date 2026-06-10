@@ -8,12 +8,13 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
-use context::{BodyBuffer, RequestCtx};
+use context::{BodyBuffer, PendingBlock, RequestCtx};
 use metrics::{ACTIVE_CONNECTIONS, BYTES_RECEIVED, BYTES_SENT, TOTAL_REQUESTS};
 use pingora::prelude::*;
 use pingora::proxy::{ProxyHttp, Session};
 
 use crate::challenge::ChallengeManager;
+use crate::config::BodyLimitAction;
 use crate::geoip::GeoIp;
 use crate::logging::{
     AccessLogEntry, AuditLogEntry, AuditRequest, AuditResponse, Logger, MatchedRule,
@@ -32,12 +33,16 @@ pub struct ReverseProxyHandler {
     pub scheme: Arc<wirefilter_engine::Scheme>,
     pub engine: Engine,
     pub max_request_body_buffer: usize,
+    pub request_body_limit_action: BodyLimitAction,
     pub inspect_response_body: bool,
     pub max_response_body_buffer: usize,
+    pub response_body_limit_action: BodyLimitAction,
     pub ip_lists: Arc<IpListMatcher>,
     pub bytes_lists: Arc<BytesListMatcher>,
     pub challenge: Option<Arc<ChallengeManager>>,
     pub logger: Arc<Logger>,
+    pub has_request_body_rules: bool,
+    pub has_response_body_rules: bool,
 }
 
 fn evaluate_phase(
@@ -51,6 +56,7 @@ fn evaluate_phase(
         &ctx.exec_ctx,
         &mut ctx.waf_scores,
         &mut ctx.waf_matched_rules,
+        &mut ctx.waf_payloads,
     );
 
     match &action {
@@ -58,19 +64,16 @@ fn evaluate_phase(
             ctx.waf_matched_rules
                 .push((rule_id.clone(), "block".into()));
             ctx.waf_action = "block".into();
-            ctx.waf_rule_id = Some(rule_id.clone());
         }
         RuleAction::Allow { rule_id } => {
             ctx.waf_matched_rules
                 .push((rule_id.clone(), "allow".into()));
             ctx.waf_action = "allow".into();
-            ctx.waf_rule_id = Some(rule_id.clone());
         }
         RuleAction::Challenge { rule_id } => {
             ctx.waf_matched_rules
                 .push((rule_id.clone(), "challenge".into()));
             ctx.waf_action = "challenge".into();
-            ctx.waf_rule_id = Some(rule_id.clone());
         }
         RuleAction::NoMatch => {}
     }
@@ -80,6 +83,87 @@ fn evaluate_phase(
     } else {
         action
     }
+}
+
+/// Populate request-body wirefilter fields (form/multipart/raw) from the
+/// buffer.
+async fn finalize_request_body(
+    handler: &ReverseProxyHandler,
+    session: &mut Session,
+    ctx: &mut RequestCtx,
+) {
+    let content_type = session
+        .req_header()
+        .headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    populate::body_fields(
+        &mut ctx.exec_ctx,
+        &handler.scheme,
+        &ctx.req_body.buf,
+        ctx.req_body.total_size,
+        ctx.req_body.truncated,
+        content_type.as_deref(),
+    );
+
+    if let Some(tx) = ctx.multipart_tx.take() {
+        drop(tx);
+        if let Some(handle) = ctx.multipart_task.take() {
+            if let Ok(parts) = handle.await {
+                populate::multipart_fields(&mut ctx.exec_ctx, &handler.scheme, &parts);
+            }
+        }
+    }
+}
+
+/// Populate response-body wirefilter fields from the buffer.
+fn finalize_response_body(handler: &ReverseProxyHandler, ctx: &mut RequestCtx) {
+    populate::response_body_fields(
+        &mut ctx.exec_ctx,
+        &handler.scheme,
+        &ctx.res_body.buf,
+        ctx.res_body.total_size,
+        ctx.res_body.truncated,
+    );
+}
+
+/// Evaluate a body phase and translate a Block action into a [`PendingBlock`].
+///
+/// Note: this runs the phase, so it has the usual side effects (scores,
+/// matched-rules, payload capture) regardless of the returned decision.
+fn evaluate_body_phase(
+    handler: &ReverseProxyHandler,
+    ctx: &mut RequestCtx,
+    phase: &Phase,
+) -> Option<PendingBlock> {
+    match evaluate_phase(handler, ctx, phase) {
+        RuleAction::Block {
+            status_code,
+            content_type,
+            content,
+            ..
+        } => Some(PendingBlock {
+            status_code,
+            content_type,
+            content,
+        }),
+        _ => None,
+    }
+}
+
+/// Suppress a response body that matched a ResponseBody block rule, replacing
+/// it with the rule's block content. The response status/headers were already
+/// sent downstream, so only the body bytes can change here —
+/// `PendingBlock.status_code` and `content_type` are ignored on this path; only
+/// `content` is used.
+fn suppress_response_body(body: &mut Option<bytes::Bytes>, ctx: &mut RequestCtx, pb: PendingBlock) {
+    ctx.res_blocked = true;
+    ctx.res_body_pending.clear();
+    ctx.waf_blocked = true;
+    let content = pb.content.unwrap_or_default().into_bytes();
+    BYTES_SENT.inc_by(content.len() as u64);
+    *body = Some(bytes::Bytes::from(content));
 }
 
 fn extract_request_data(session: &Session, geo: &Option<crate::geoip::GeoIpLookup>) -> RequestData {
@@ -340,9 +424,15 @@ impl ProxyHttp for ReverseProxyHandler {
             res_body: BodyBuffer::new(self.max_response_body_buffer),
             waf_scores: HashMap::new(),
             waf_matched_rules: Vec::new(),
+            waf_payloads: serde_json::Map::new(),
             waf_action: "pass".into(),
-            waf_rule_id: None,
             waf_blocked: false,
+            pending_block: None,
+            req_body_pending: Vec::new(),
+            req_passthrough: false,
+            res_body_pending: Vec::new(),
+            res_passthrough: false,
+            res_blocked: false,
         }
     }
 
@@ -424,39 +514,138 @@ impl ProxyHttp for ReverseProxyHandler {
         end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
+        // Fast path: no RequestBody-phase rules. Stream chunks through unchanged,
+        // keeping a capped copy for audit/field population (original behavior).
+        if !self.has_request_body_rules {
+            if let Some(data) = body.as_ref() {
+                BYTES_RECEIVED.inc_by(data.len() as u64);
+                ctx.req_body.feed(data);
+                if let Some(ref tx) = ctx.multipart_tx {
+                    let _ = tx.send(Ok(data.clone())).await;
+                }
+            }
+            if end_of_stream {
+                finalize_request_body(self, session, ctx).await;
+            }
+            return Ok(());
+        }
+
+        // Already released to upstream (process_partial past the limit): pass through.
+        if ctx.req_passthrough {
+            if let Some(data) = body.as_ref() {
+                BYTES_RECEIVED.inc_by(data.len() as u64);
+            }
+            return Ok(());
+        }
+
+        // Inspection mode: accumulate and withhold from upstream until a verdict.
         if let Some(data) = body.as_ref() {
             BYTES_RECEIVED.inc_by(data.len() as u64);
             ctx.req_body.feed(data);
+            ctx.req_body_pending.extend_from_slice(data);
             if let Some(ref tx) = ctx.multipart_tx {
                 let _ = tx.send(Ok(data.clone())).await;
             }
         }
 
-        if end_of_stream {
-            let content_type = session
-                .req_header()
-                .headers
-                .get("content-type")
-                .and_then(|v| v.to_str().ok());
-            populate::body_fields(
-                &mut ctx.exec_ctx,
-                &self.scheme,
-                &ctx.req_body.buf,
-                ctx.req_body.total_size,
-                ctx.req_body.truncated,
-                content_type,
-            );
-
-            if let Some(tx) = ctx.multipart_tx.take() {
-                drop(tx);
-                if let Some(handle) = ctx.multipart_task.take() {
-                    if let Ok(parts) = handle.await {
-                        populate::multipart_fields(&mut ctx.exec_ctx, &self.scheme, &parts);
+        // Body exceeded the buffer limit before the stream ended.
+        if !end_of_stream && ctx.req_body.truncated {
+            match self.request_body_limit_action {
+                BodyLimitAction::Reject => {
+                    ctx.pending_block = Some(PendingBlock {
+                        status_code: 413,
+                        content_type: None,
+                        content: Some("request body too large".into()),
+                    });
+                    ctx.waf_action = "block".into();
+                    return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(413)));
+                }
+                BodyLimitAction::ProcessPartial => {
+                    finalize_request_body(self, session, ctx).await;
+                    if let Some(pb) = evaluate_body_phase(self, ctx, &Phase::RequestBody) {
+                        ctx.pending_block = Some(pb);
+                        // Status/content come from pending_block in fail_to_proxy; the
+                        // error code here only signals "abort proxying".
+                        return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(403)));
                     }
+                    // Allowed: release what we buffered, stream the remainder uninspected.
+                    *body = Some(bytes::Bytes::from(std::mem::take(
+                        &mut ctx.req_body_pending,
+                    )));
+                    ctx.req_passthrough = true;
+                    return Ok(());
                 }
             }
         }
+
+        if end_of_stream {
+            finalize_request_body(self, session, ctx).await;
+            if let Some(pb) = evaluate_body_phase(self, ctx, &Phase::RequestBody) {
+                ctx.pending_block = Some(pb);
+                // Status/content come from pending_block in fail_to_proxy; the
+                // error code here only signals "abort proxying".
+                return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(403)));
+            }
+            // Allowed: release the full buffered body as the final chunk.
+            *body = Some(bytes::Bytes::from(std::mem::take(
+                &mut ctx.req_body_pending,
+            )));
+            return Ok(());
+        }
+
+        // Withhold this chunk. An empty chunk (not None) avoids signalling
+        // end-of-body to the upstream (`upstream_end_of_body = end || data.is_none()`).
+        *body = Some(bytes::Bytes::new());
         Ok(())
+    }
+
+    async fn fail_to_proxy(
+        &self,
+        session: &mut Session,
+        e: &pingora::Error,
+        ctx: &mut Self::CTX,
+    ) -> pingora::proxy::FailToProxy
+    where
+        Self::CTX: Send + Sync,
+    {
+        // A body-phase rule asked to block: render the configured block response.
+        if let Some(pb) = ctx.pending_block.take() {
+            let code = pb.status_code;
+            send_block_response(
+                session,
+                pb.status_code,
+                pb.content_type.as_deref(),
+                pb.content.as_deref(),
+            )
+            .await;
+            ctx.waf_blocked = true;
+            return pingora::proxy::FailToProxy {
+                error_code: code,
+                can_reuse_downstream: false,
+            };
+        }
+
+        // Otherwise mirror pingora's default error handling.
+        let code = match e.etype() {
+            pingora::ErrorType::HTTPStatus(code) => *code,
+            _ => match e.esource() {
+                pingora::ErrorSource::Upstream => 502,
+                pingora::ErrorSource::Downstream => match e.etype() {
+                    pingora::ErrorType::WriteError
+                    | pingora::ErrorType::ReadError
+                    | pingora::ErrorType::ConnectionClosed => 0,
+                    _ => 400,
+                },
+                pingora::ErrorSource::Internal | pingora::ErrorSource::Unset => 500,
+            },
+        };
+        if code > 0 {
+            let _ = session.respond_error(code).await;
+        }
+        pingora::proxy::FailToProxy {
+            error_code: code,
+            can_reuse_downstream: false,
+        }
     }
 
     async fn upstream_peer(
@@ -496,6 +685,11 @@ impl ProxyHttp for ReverseProxyHandler {
         let resp_data = extract_response_data(upstream_response);
         populate::response_fields(&mut ctx.exec_ctx, &self.scheme, &resp_data);
         evaluate_phase(self, ctx, &Phase::ResponseHeaders);
+        // If a ResponseBody rule might rewrite/suppress the body, drop
+        // Content-Length so the (possibly altered) body can be re-framed as chunked.
+        if self.inspect_response_body && self.has_response_body_rules {
+            upstream_response.remove_header(http::header::CONTENT_LENGTH.as_str());
+        }
         Ok(())
     }
 
@@ -506,25 +700,86 @@ impl ProxyHttp for ReverseProxyHandler {
         end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> Result<Option<std::time::Duration>> {
-        if let Some(data) = body.as_ref() {
-            BYTES_SENT.inc_by(data.len() as u64);
+        // Fast path: not inspecting, or no ResponseBody rules to act on. Stream
+        // through, evaluating only for side effects (score/log/payload), as before.
+        if !self.inspect_response_body || !self.has_response_body_rules {
+            if let Some(data) = body.as_ref() {
+                BYTES_SENT.inc_by(data.len() as u64);
+            }
+            if self.inspect_response_body {
+                if let Some(data) = body.as_ref() {
+                    ctx.res_body.feed(data);
+                }
+                if end_of_stream {
+                    finalize_response_body(self, ctx);
+                    evaluate_phase(self, ctx, &Phase::ResponseBody);
+                }
+            }
+            return Ok(None);
         }
 
-        if self.inspect_response_body {
+        // Already suppressing a blocked response: drop remaining upstream body.
+        if ctx.res_blocked {
+            *body = Some(bytes::Bytes::new());
+            return Ok(None);
+        }
+        // Already released (process_partial past the limit): stream the rest.
+        if ctx.res_passthrough {
             if let Some(data) = body.as_ref() {
-                ctx.res_body.feed(data);
+                BYTES_SENT.inc_by(data.len() as u64);
             }
-            if end_of_stream {
-                populate::response_body_fields(
-                    &mut ctx.exec_ctx,
-                    &self.scheme,
-                    &ctx.res_body.buf,
-                    ctx.res_body.total_size,
-                    ctx.res_body.truncated,
-                );
-                evaluate_phase(self, ctx, &Phase::ResponseBody);
+            return Ok(None);
+        }
+
+        // Inspection mode: accumulate and withhold from downstream until a verdict.
+        if let Some(data) = body.as_ref() {
+            ctx.res_body.feed(data);
+            ctx.res_body_pending.extend_from_slice(data);
+        }
+
+        // Body exceeded the buffer limit before the response ended.
+        if !end_of_stream && ctx.res_body.truncated {
+            match self.response_body_limit_action {
+                BodyLimitAction::Reject => {
+                    let pb = PendingBlock {
+                        status_code: 0,
+                        content_type: None,
+                        content: Some("response blocked".into()),
+                    };
+                    suppress_response_body(body, ctx, pb);
+                    return Ok(None);
+                }
+                BodyLimitAction::ProcessPartial => {
+                    finalize_response_body(self, ctx);
+                    if let Some(pb) = evaluate_body_phase(self, ctx, &Phase::ResponseBody) {
+                        suppress_response_body(body, ctx, pb);
+                        return Ok(None);
+                    }
+                    // Allowed: release buffered bytes, stream the remainder uninspected.
+                    let pending = std::mem::take(&mut ctx.res_body_pending);
+                    BYTES_SENT.inc_by(pending.len() as u64);
+                    *body = Some(bytes::Bytes::from(pending));
+                    ctx.res_passthrough = true;
+                    return Ok(None);
+                }
             }
         }
+
+        if end_of_stream {
+            finalize_response_body(self, ctx);
+            if let Some(pb) = evaluate_body_phase(self, ctx, &Phase::ResponseBody) {
+                suppress_response_body(body, ctx, pb);
+                return Ok(None);
+            }
+            // Allowed: release the full buffered body as the final chunk.
+            let pending = std::mem::take(&mut ctx.res_body_pending);
+            BYTES_SENT.inc_by(pending.len() as u64);
+            *body = Some(bytes::Bytes::from(pending));
+            return Ok(None);
+        }
+
+        // Withhold this chunk (empty, not None) until a verdict is reached.
+        *body = Some(bytes::Bytes::new());
         Ok(None)
     }
 
@@ -611,12 +866,12 @@ impl ProxyHttp for ReverseProxyHandler {
                 request_id: ctx.request_id.clone(),
                 timestamp: now,
                 waf_action: std::mem::take(&mut ctx.waf_action),
-                waf_rule_id: ctx.waf_rule_id.take(),
                 waf_matched_rules: std::mem::take(&mut ctx.waf_matched_rules)
                     .into_iter()
                     .map(|(id, action)| MatchedRule { id, action })
                     .collect(),
                 waf_scores: std::mem::take(&mut ctx.waf_scores),
+                waf_payloads: std::mem::take(&mut ctx.waf_payloads),
                 request: AuditRequest {
                     client_ip: access.client_ip.clone(),
                     method,

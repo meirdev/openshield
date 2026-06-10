@@ -153,6 +153,9 @@ fn main() {
         info!("Detection-only mode: rules evaluate but no requests will be blocked");
     }
 
+    let has_request_body_rules = engine.has_phase(&waf::engine::Phase::RequestBody);
+    let has_response_body_rules = engine.has_phase(&waf::engine::Phase::ResponseBody);
+
     let handler = proxy::ReverseProxyHandler {
         detection_only: config.detection_only,
         upstream_tls,
@@ -162,12 +165,16 @@ fn main() {
         scheme: scheme.clone(),
         engine,
         max_request_body_buffer: config.max_request_body_buffer,
+        request_body_limit_action: config.request_body_limit_action,
         inspect_response_body: config.inspect_response_body,
         max_response_body_buffer: config.max_response_body_buffer,
+        response_body_limit_action: config.response_body_limit_action,
         ip_lists: Arc::new(ip_lists),
         bytes_lists: Arc::new(bytes_lists),
         challenge,
         logger,
+        has_request_body_rules,
+        has_response_body_rules,
     };
 
     let mut proxy_service = http_proxy_service(&server.configuration, handler);

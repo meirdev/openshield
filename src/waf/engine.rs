@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use log::{debug, info, warn};
 use wirefilter_engine::{ExecutionContext, Filter, LhsValue, Scheme};
 
+use super::payload;
 use super::ratelimit::{RateLimitKey, RateLimitManager};
 
 #[derive(Debug, Clone)]
@@ -35,6 +36,9 @@ pub struct CompiledRule {
     pub action: Action,
     pub filter: Filter,
     pub ratelimit_characteristics: Option<Vec<String>>,
+    /// Fields referenced by this rule's expression, captured for payload
+    /// logging.
+    pub log_fields: Vec<String>,
 }
 
 pub enum RuleAction {
@@ -56,10 +60,15 @@ pub enum RuleAction {
 pub struct Engine {
     rules: HashMap<Phase, Vec<CompiledRule>>,
     pub ratelimit_mgr: RateLimitManager,
+    log_payloads: bool,
 }
 
 impl Engine {
-    pub fn new(rules: Vec<CompiledRule>, ratelimit_mgr: RateLimitManager) -> Self {
+    pub fn new(
+        rules: Vec<CompiledRule>,
+        ratelimit_mgr: RateLimitManager,
+        log_payloads: bool,
+    ) -> Self {
         let mut grouped: HashMap<Phase, Vec<CompiledRule>> = HashMap::new();
         for rule in rules {
             grouped.entry(rule.phase.clone()).or_default().push(rule);
@@ -74,6 +83,7 @@ impl Engine {
         Self {
             rules: grouped,
             ratelimit_mgr,
+            log_payloads,
         }
     }
 
@@ -83,6 +93,7 @@ impl Engine {
         ctx: &ExecutionContext<'_>,
         scores: &mut HashMap<String, i64>,
         matched_rules: &mut Vec<(String, String)>, // (rule_id, action)
+        payloads: &mut serde_json::Map<String, serde_json::Value>,
     ) -> RuleAction {
         let Some(phase_rules) = self.rules.get(phase) else {
             return RuleAction::NoMatch;
@@ -113,6 +124,10 @@ impl Engine {
             }
 
             debug!("Rule '{}' matched (action: {:?})", rule.id, rule.action);
+
+            if self.log_payloads && !rule.log_fields.is_empty() {
+                payload::capture_into(ctx.scheme(), ctx, &rule.log_fields, payloads);
+            }
 
             match &rule.action {
                 Action::Block {
@@ -160,6 +175,10 @@ impl Engine {
 
     pub fn rule_count(&self) -> usize {
         self.rules.values().map(|v| v.len()).sum()
+    }
+
+    pub fn has_phase(&self, phase: &Phase) -> bool {
+        self.rules.get(phase).is_some_and(|v| !v.is_empty())
     }
 }
 

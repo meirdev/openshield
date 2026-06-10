@@ -29,10 +29,16 @@ pub struct Config {
     pub max_request_body_buffer: usize,
 
     #[serde(default)]
+    pub request_body_limit_action: BodyLimitAction,
+
+    #[serde(default)]
     pub inspect_response_body: bool,
 
     #[serde(default = "default_max_response_body_buffer")]
     pub max_response_body_buffer: usize,
+
+    #[serde(default)]
+    pub response_body_limit_action: BodyLimitAction,
 
     #[serde(default)]
     pub logging: LoggingConfig,
@@ -73,6 +79,8 @@ pub struct LoggingConfig {
     pub access_log: PathBuf,
     /// Audit log output path — detailed logs when rules match
     pub audit_log: PathBuf,
+    /// Log the payload values that triggered each matched rule (audit log).
+    pub log_payloads: bool,
 }
 
 impl Default for LoggingConfig {
@@ -82,6 +90,7 @@ impl Default for LoggingConfig {
             format: "json".into(),
             access_log: PathBuf::from("/dev/stdout"),
             audit_log: PathBuf::from("/dev/stderr"),
+            log_payloads: false,
         }
     }
 }
@@ -143,6 +152,14 @@ pub enum Action {
     Allow,
     Score,
     Challenge,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BodyLimitAction {
+    #[default]
+    ProcessPartial,
+    Reject,
 }
 
 #[derive(Debug, Clone, Deserialize)]

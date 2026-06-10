@@ -3,6 +3,7 @@ use wirefilter_engine::Scheme;
 
 use crate::config;
 use crate::waf::engine::{Action, CompiledRule, Engine, Phase};
+use crate::waf::payload;
 use crate::waf::ratelimit::RateLimitManager;
 
 /// Compile rules from config into an Engine.
@@ -20,6 +21,7 @@ pub fn compile(
         let ast = scheme
             .parse(&rule_cfg.expression)
             .map_err(|e| format!("Failed to parse rule '{}': {}", rule_cfg.id, e))?;
+        let log_fields = payload::referenced_fields(&ast);
         let filter = ast.compile();
 
         let phase = convert_phase(&rule_cfg.phase);
@@ -42,10 +44,11 @@ pub fn compile(
             action,
             filter,
             ratelimit_characteristics,
+            log_fields,
         });
     }
 
-    Ok(Engine::new(rules, mgr))
+    Ok(Engine::new(rules, mgr, config.logging.log_payloads))
 }
 
 fn convert_phase(phase: &config::Phase) -> Phase {

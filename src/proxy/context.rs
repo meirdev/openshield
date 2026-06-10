@@ -45,6 +45,16 @@ impl BodyBuffer {
 
 pub use crate::waf::data::MultipartPartData;
 
+/// A block decision made during a body phase, rendered later (in
+/// `fail_to_proxy` for requests, or as a replacement response body for
+/// responses).
+#[derive(Clone)]
+pub struct PendingBlock {
+    pub status_code: u16,
+    pub content_type: Option<String>,
+    pub content: Option<String>,
+}
+
 pub struct RequestCtx {
     pub request_id: String,
     pub start: Instant,
@@ -56,9 +66,25 @@ pub struct RequestCtx {
     pub multipart_task: Option<tokio::task::JoinHandle<Vec<MultipartPartData>>>,
     pub waf_scores: HashMap<String, i64>,
     pub waf_matched_rules: Vec<(String, String)>, // (rule_id, action)
+    pub waf_payloads: serde_json::Map<String, serde_json::Value>,
     pub waf_action: String,
-    pub waf_rule_id: Option<String>,
     pub waf_blocked: bool,
+
+    /// Block decision from a body phase, rendered in `fail_to_proxy`.
+    pub pending_block: Option<PendingBlock>,
+    /// Request body bytes withheld from upstream pending an inspection verdict.
+    pub req_body_pending: Vec<u8>,
+    /// Once true, the request body buffer was released and remaining chunks
+    /// stream straight through (process_partial after exceeding the limit).
+    pub req_passthrough: bool,
+    /// Response body bytes withheld from downstream pending a verdict.
+    pub res_body_pending: Vec<u8>,
+    /// Once true, the response body buffer was released and remaining chunks
+    /// stream straight through.
+    pub res_passthrough: bool,
+    /// Once true, the response body matched a block rule and is being
+    /// suppressed.
+    pub res_blocked: bool,
 }
 
 impl Drop for RequestCtx {
