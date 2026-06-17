@@ -110,3 +110,69 @@ impl FunctionDefinition for LookupJsonStringFunction {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::waf::functions::test_support::eval_bytes;
+
+    const SRC: &str = "http.request.body.raw";
+
+    #[test]
+    fn top_level_string() {
+        assert!(eval_bytes(
+            r#"lookup_json_string(http.request.body.raw, "name") == "alice""#,
+            SRC,
+            br#"{"name":"alice"}"#,
+        ));
+    }
+
+    #[test]
+    fn nested_object() {
+        assert!(eval_bytes(
+            r#"lookup_json_string(http.request.body.raw, "user", "name") == "bob""#,
+            SRC,
+            br#"{"user":{"name":"bob"}}"#,
+        ));
+    }
+
+    #[test]
+    fn array_index() {
+        assert!(eval_bytes(
+            r#"lookup_json_string(http.request.body.raw, "items", 1) == "b""#,
+            SRC,
+            br#"{"items":["a","b","c"]}"#,
+        ));
+    }
+
+    #[test]
+    fn number_and_bool_coerced_to_string() {
+        assert!(eval_bytes(
+            r#"lookup_json_string(http.request.body.raw, "age") == "42""#,
+            SRC,
+            br#"{"age":42}"#,
+        ));
+        assert!(eval_bytes(
+            r#"lookup_json_string(http.request.body.raw, "ok") == "true""#,
+            SRC,
+            br#"{"ok":true}"#,
+        ));
+    }
+
+    #[test]
+    fn missing_key_yields_empty() {
+        assert!(eval_bytes(
+            r#"lookup_json_string(http.request.body.raw, "missing") == """#,
+            SRC,
+            br#"{"present":1}"#,
+        ));
+    }
+
+    #[test]
+    fn invalid_json_yields_empty() {
+        assert!(eval_bytes(
+            r#"lookup_json_string(http.request.body.raw, "any") == """#,
+            SRC,
+            b"this is not json",
+        ));
+    }
+}

@@ -126,3 +126,45 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
     b.add_function("lookup_json_string", json::LookupJsonStringFunction)
         .unwrap();
 }
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use wirefilter_engine::{Bytes as WfBytes, ExecutionContext, LhsValue, Scheme, TypedArray};
+
+    /// Build the production scheme (all fields + functions registered).
+    pub fn scheme() -> Scheme {
+        crate::waf::scheme::build(&[])
+    }
+
+    /// Parse and evaluate a boolean `expr` after setting a single `Bytes`
+    /// field to `value`. Exercises functions that read one source field —
+    /// the way rules actually invoke them.
+    pub fn eval_bytes(expr: &str, field: &str, value: &[u8]) -> bool {
+        let scheme = scheme();
+        let filter = scheme
+            .parse(expr)
+            .expect("expression should parse")
+            .compile();
+        let mut ctx = ExecutionContext::new(&scheme);
+        let f = scheme.get_field(field).expect("field should exist");
+        ctx.set_field_value(f, LhsValue::Bytes(value.to_vec().into()))
+            .expect("set field value");
+        filter.execute(&ctx).expect("filter should execute")
+    }
+
+    /// Like [`eval_bytes`], but sets an `Array<Bytes>` field — exercises the
+    /// polymorphic element-wise path (e.g. `func(field[*])`).
+    pub fn eval_array(expr: &str, field: &str, values: &[&[u8]]) -> bool {
+        let scheme = scheme();
+        let filter = scheme
+            .parse(expr)
+            .expect("expression should parse")
+            .compile();
+        let mut ctx = ExecutionContext::new(&scheme);
+        let f = scheme.get_field(field).expect("field should exist");
+        let arr: TypedArray<'static, WfBytes<'static>> =
+            TypedArray::from_iter(values.iter().map(|v| WfBytes::from(v.to_vec())));
+        ctx.set_field_value(f, arr).expect("set field value");
+        filter.execute(&ctx).expect("filter should execute")
+    }
+}

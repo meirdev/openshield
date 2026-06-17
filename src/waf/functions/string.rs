@@ -141,4 +141,61 @@ mod tests {
         assert_eq!(remove_whitespace(b" a b\tc\n"), b"abc");
         assert_eq!(remove_whitespace(b"nospace"), b"nospace");
     }
+
+    // Expression-level tests: confirm the functions are registered and wired
+    // through the scheme the way rules invoke them.
+    mod via_scheme {
+        use crate::waf::functions::test_support::eval_bytes;
+
+        const HOST: &str = "http.host";
+
+        #[test]
+        fn len_returns_byte_count() {
+            assert!(eval_bytes("len(http.host) == 5", HOST, b"hello"));
+            assert!(eval_bytes("len(http.host) == 0", HOST, b""));
+        }
+
+        #[test]
+        fn starts_with_literal() {
+            assert!(eval_bytes(
+                r#"starts_with(http.host, "he")"#,
+                HOST,
+                b"hello"
+            ));
+            assert!(!eval_bytes(
+                r#"starts_with(http.host, "xy")"#,
+                HOST,
+                b"hello"
+            ));
+        }
+
+        #[test]
+        fn ends_with_literal() {
+            assert!(eval_bytes(r#"ends_with(http.host, "lo")"#, HOST, b"hello"));
+            assert!(!eval_bytes(r#"ends_with(http.host, "xy")"#, HOST, b"hello"));
+        }
+
+        #[test]
+        fn transform_then_compare() {
+            // Polymorphic Bytes path: lower(field) applied before comparison.
+            assert!(eval_bytes(r#"lower(http.host) == "abc""#, HOST, b"ABC"));
+        }
+
+        #[test]
+        fn transform_over_array() {
+            use crate::waf::functions::test_support::eval_array;
+            // Polymorphic Array path: lower() maps element-wise over the array,
+            // feeding its transformed array into detect_sqli's array path.
+            assert!(eval_array(
+                "any(detect_sqli(lower(http.request.uri.args.values[*])))",
+                "http.request.uri.args.values",
+                &[b"benign", b"1' OR '1'='1"],
+            ));
+            assert!(!eval_array(
+                "any(detect_sqli(lower(http.request.uri.args.values[*])))",
+                "http.request.uri.args.values",
+                &[b"hello", b"world"],
+            ));
+        }
+    }
 }

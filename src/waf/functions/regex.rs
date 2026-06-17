@@ -165,3 +165,47 @@ impl FunctionDefinition for RegexReplaceFunction {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::waf::functions::test_support::eval_bytes;
+
+    const SRC: &str = "http.request.uri";
+
+    #[test]
+    fn capture_group_by_index() {
+        // [0] is the whole match, [1] is the first capture group.
+        assert!(eval_bytes(
+            r#"regex_capture(http.request.uri, "id=([0-9]+)")[1] == "42""#,
+            SRC,
+            b"/path?id=42&x=1",
+        ));
+    }
+
+    #[test]
+    fn capture_whole_match() {
+        assert!(eval_bytes(
+            r#"regex_capture(http.request.uri, "id=[0-9]+")[0] == "id=42""#,
+            SRC,
+            b"/path?id=42",
+        ));
+    }
+
+    #[test]
+    fn replace_all_matches() {
+        assert!(eval_bytes(
+            r#"regex_replace(http.request.uri, "[0-9]+", "N") == "/u/N/p/N""#,
+            SRC,
+            b"/u/12/p/345",
+        ));
+    }
+
+    #[test]
+    fn replace_no_match_is_unchanged() {
+        assert!(eval_bytes(
+            r#"regex_replace(http.request.uri, "[0-9]+", "N") == "/static/page""#,
+            SRC,
+            b"/static/page",
+        ));
+    }
+}
