@@ -99,3 +99,46 @@ pub fn ends_with_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
     };
     Some(LhsValue::Bool(input.ends_with(&suffix)))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lower_upper_ascii_only() {
+        assert_eq!(lower(b"AbC123"), b"abc123");
+        assert_eq!(upper(b"AbC123"), b"ABC123");
+        // Non-ASCII bytes are untouched (ASCII-only casing).
+        let utf8 = "É".as_bytes();
+        assert_eq!(lower(utf8), utf8);
+    }
+
+    #[test]
+    fn trim_variants() {
+        assert_eq!(trim(b"  hello  "), b"hello");
+        assert_eq!(trim(b"\t\n hi \r\n"), b"hi");
+        assert_eq!(trim_start(b"  hello  "), b"hello  ");
+        assert_eq!(trim_end(b"  hello  "), b"  hello");
+    }
+
+    #[test]
+    fn trim_all_whitespace_is_empty() {
+        assert_eq!(trim(b"    "), b"");
+        assert_eq!(trim_start(b"    "), b"");
+        assert_eq!(trim_end(b"    "), b"");
+        assert_eq!(trim(b""), b"");
+    }
+
+    #[test]
+    fn null_handling() {
+        assert_eq!(remove_nulls(b"a\0b\0c"), b"abc");
+        assert_eq!(replace_nulls(b"a\0b\0c"), b"a b c");
+        assert_eq!(remove_nulls(b"abc"), b"abc");
+    }
+
+    #[test]
+    fn remove_whitespace_strips_interior_too() {
+        assert_eq!(remove_whitespace(b" a b\tc\n"), b"abc");
+        assert_eq!(remove_whitespace(b"nospace"), b"nospace");
+    }
+}

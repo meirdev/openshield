@@ -88,3 +88,88 @@ fn hex2(a: u8, b: u8) -> u8 {
     };
     (hi << 4) | lo
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn url_decode_passthrough_when_no_escapes() {
+        assert_eq!(url_decode_uni(b"plain text"), b"plain text");
+        assert_eq!(url_decode_uni(b""), b"");
+    }
+
+    #[test]
+    fn url_decode_plus_becomes_space() {
+        assert_eq!(url_decode_uni(b"a+b+c"), b"a b c");
+    }
+
+    #[test]
+    fn url_decode_percent_hex() {
+        // %41 == 'A', case-insensitive hex digits.
+        assert_eq!(url_decode_uni(b"%41%42%43"), b"ABC");
+        assert_eq!(url_decode_uni(b"%2f"), b"/");
+        assert_eq!(url_decode_uni(b"%2F"), b"/");
+        // Decodes a classic SQLi quote: %27 == '\''.
+        assert_eq!(url_decode_uni(b"1%27%20OR%201"), b"1' OR 1");
+    }
+
+    #[test]
+    fn url_decode_unicode_escape() {
+        // %u0041 -> 'A' (high pair "00", low pair "41").
+        assert_eq!(url_decode_uni(b"%u0041"), b"A");
+        // Uppercase U is also accepted.
+        assert_eq!(url_decode_uni(b"%U0041"), b"A");
+    }
+
+    #[test]
+    fn url_decode_fullwidth_normalization() {
+        // %uffXX with high pair "ff" maps fullwidth ASCII back to ASCII:
+        // 0x41 + 0x20 == 0x61 == 'a'. Defeats fullwidth-encoding bypasses.
+        assert_eq!(url_decode_uni(b"%uff41"), b"a");
+    }
+
+    #[test]
+    fn url_decode_malformed_passes_through() {
+        // Non-hex after % is left intact.
+        assert_eq!(url_decode_uni(b"%zz"), b"%zz");
+        // Truncated escape at end is left intact.
+        assert_eq!(url_decode_uni(b"abc%4"), b"abc%4");
+        assert_eq!(url_decode_uni(b"%"), b"%");
+    }
+
+    #[test]
+    fn base64_decode_standard_and_urlsafe() {
+        assert_eq!(base64_decode(b"aGVsbG8="), b"hello");
+        // URL-safe alphabet ('-' and '_') is accepted via fallback.
+        assert_eq!(base64_decode(b"-_8="), &[0xfb, 0xff]);
+    }
+
+    #[test]
+    fn base64_decode_invalid_passes_through() {
+        assert_eq!(base64_decode(b"not valid!!"), b"not valid!!");
+    }
+
+    #[test]
+    fn hex_decode_roundtrip_and_invalid() {
+        assert_eq!(hex_decode(b"6162"), b"ab");
+        // Odd-length / non-hex input is returned unchanged.
+        assert_eq!(hex_decode(b"xyz"), b"xyz");
+        assert_eq!(hex_decode(b"616"), b"616");
+    }
+
+    #[test]
+    fn html_entity_decode_basic() {
+        assert_eq!(html_entity_decode(b"&lt;script&gt;"), b"<script>");
+        assert_eq!(html_entity_decode(b"&amp;"), b"&");
+        assert_eq!(html_entity_decode(b"&#39;"), b"'");
+        // No entities -> unchanged.
+        assert_eq!(html_entity_decode(b"plain"), b"plain");
+    }
+
+    #[test]
+    fn html_entity_decode_invalid_utf8_passes_through() {
+        let input = [0xff, 0xfe, 0x41];
+        assert_eq!(html_entity_decode(&input), &input);
+    }
+}
