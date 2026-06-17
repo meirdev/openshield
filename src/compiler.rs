@@ -45,6 +45,7 @@ pub fn compile(
             filter,
             ratelimit_characteristics,
             log_fields,
+            logging: rule_cfg.logging.enabled,
         });
     }
 

@@ -91,6 +91,8 @@ rules:
     phase: request_headers
     action: block
     expression: "http.user_agent in $blocked_ua"
+    logging:
+      enabled: false
 
   - id: rate-limit
     phase: request_headers

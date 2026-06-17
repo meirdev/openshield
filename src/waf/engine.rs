@@ -36,9 +36,8 @@ pub struct CompiledRule {
     pub action: Action,
     pub filter: Filter,
     pub ratelimit_characteristics: Option<Vec<String>>,
-    /// Fields referenced by this rule's expression, captured for payload
-    /// logging.
     pub log_fields: Vec<String>,
+    pub logging: bool,
 }
 
 pub enum RuleAction {
@@ -47,12 +46,15 @@ pub enum RuleAction {
         status_code: u16,
         content_type: Option<String>,
         content: Option<String>,
+        log: bool,
     },
     Allow {
         rule_id: String,
+        log: bool,
     },
     Challenge {
         rule_id: String,
+        log: bool,
     },
     NoMatch,
 }
@@ -125,7 +127,7 @@ impl Engine {
 
             debug!("Rule '{}' matched (action: {:?})", rule.id, rule.action);
 
-            if self.log_payloads && !rule.log_fields.is_empty() {
+            if self.log_payloads && rule.logging && !rule.log_fields.is_empty() {
                 payload::capture_into(ctx.scheme(), ctx, &rule.log_fields, payloads);
             }
 
@@ -141,17 +143,21 @@ impl Engine {
                         status_code: *status_code,
                         content_type: content_type.clone(),
                         content: content.clone(),
+                        log: rule.logging,
                     };
                 }
                 Action::Allow => {
                     info!("ALLOW by rule '{}'", rule.id);
                     return RuleAction::Allow {
                         rule_id: rule.id.clone(),
+                        log: rule.logging,
                     };
                 }
                 Action::Log => {
                     info!("LOG by rule '{}'", rule.id);
-                    matched_rules.push((rule.id.clone(), "log".into()));
+                    if rule.logging {
+                        matched_rules.push((rule.id.clone(), "log".into()));
+                    }
                 }
                 Action::Score { scores: score_list } => {
                     for (name, increment) in score_list {
@@ -159,12 +165,15 @@ impl Engine {
                         *counter += increment;
                         debug!("SCORE '{}' += {} (now {})", name, increment, counter);
                     }
-                    matched_rules.push((rule.id.clone(), "score".into()));
+                    if rule.logging {
+                        matched_rules.push((rule.id.clone(), "score".into()));
+                    }
                 }
                 Action::Challenge => {
                     info!("CHALLENGE by rule '{}'", rule.id);
                     return RuleAction::Challenge {
                         rule_id: rule.id.clone(),
+                        log: rule.logging,
                     };
                 }
             }

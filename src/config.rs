@@ -132,6 +132,20 @@ pub struct RuleConfig {
     pub action_parameters: Option<ActionParameters>,
     #[serde(default)]
     pub ratelimit: Option<RateLimitConfig>,
+    #[serde(default)]
+    pub logging: RuleLoggingConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct RuleLoggingConfig {
+    pub enabled: bool,
+}
+
+impl Default for RuleLoggingConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]

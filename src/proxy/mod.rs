@@ -60,19 +60,25 @@ fn evaluate_phase(
     );
 
     match &action {
-        RuleAction::Block { rule_id, .. } => {
-            ctx.waf_matched_rules
-                .push((rule_id.clone(), "block".into()));
+        RuleAction::Block { rule_id, log, .. } => {
+            if *log {
+                ctx.waf_matched_rules
+                    .push((rule_id.clone(), "block".into()));
+            }
             ctx.waf_action = "block".into();
         }
-        RuleAction::Allow { rule_id } => {
-            ctx.waf_matched_rules
-                .push((rule_id.clone(), "allow".into()));
+        RuleAction::Allow { rule_id, log } => {
+            if *log {
+                ctx.waf_matched_rules
+                    .push((rule_id.clone(), "allow".into()));
+            }
             ctx.waf_action = "allow".into();
         }
-        RuleAction::Challenge { rule_id } => {
-            ctx.waf_matched_rules
-                .push((rule_id.clone(), "challenge".into()));
+        RuleAction::Challenge { rule_id, log } => {
+            if *log {
+                ctx.waf_matched_rules
+                    .push((rule_id.clone(), "challenge".into()));
+            }
             ctx.waf_action = "challenge".into();
         }
         RuleAction::NoMatch => {}
