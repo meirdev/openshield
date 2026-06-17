@@ -113,7 +113,7 @@ pub fn build(score_names: &[String]) -> Scheme {
     opt!(b, "ssl", Bool);
 
     for name in score_names {
-        opt!(b, &format!("oss.waf.score.{name}"), Int);
+        opt!(b, &format!("score.{name}"), Int);
     }
 
     // functions

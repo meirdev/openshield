@@ -266,7 +266,7 @@ Keys can be string literals (object access) or integer literals (array index). R
 `http.response.code`, `http.response.content_type.media_type`, `http.response.headers`, `http.response.headers.names`, `http.response.headers.values`, `http.response.body.raw`, `http.response.body.size`, `http.response.body.truncated`
 
 **Scores:**
-`oss.waf.score.{name}` (dynamic, based on `scores` config)
+`score.{name}` (dynamic, based on `scores` config)
 
 </details>
 

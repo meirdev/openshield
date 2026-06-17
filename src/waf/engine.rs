@@ -232,7 +232,7 @@ pub fn sync_scores(
     let mut field_name = String::with_capacity(32);
     for (name, value) in scores {
         field_name.clear();
-        field_name.push_str("oss.waf.score.");
+        field_name.push_str("score.");
         field_name.push_str(name);
         if let Ok(field) = scheme.get_field(&field_name) {
             let _ = ctx.set_field_value(field, LhsValue::Int(*value));
