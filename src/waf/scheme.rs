@@ -125,3 +125,29 @@ pub fn build(score_names: &[String]) -> Scheme {
 
     b.build()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::build;
+
+    #[test]
+    fn unknown_field_is_rejected() {
+        let scheme = build(&[]);
+        assert!(scheme.get_field("does.not.exist").is_err());
+    }
+
+    #[test]
+    fn score_fields_use_score_prefix() {
+        let scheme = build(&["sqli".to_string(), "xss".to_string()]);
+        assert!(scheme.get_field("score.sqli").is_ok());
+        assert!(scheme.get_field("score.xss").is_ok());
+        // Scores not declared in config are not registered.
+        assert!(scheme.get_field("score.undeclared").is_err());
+    }
+
+    #[test]
+    fn no_score_fields_without_config() {
+        let scheme = build(&[]);
+        assert!(scheme.get_field("score.sqli").is_err());
+    }
+}

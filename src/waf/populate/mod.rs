@@ -103,3 +103,49 @@ pub(crate) fn split_pairs(pairs: &[(String, String)]) -> (Vec<String>, Vec<Strin
     let values = pairs.iter().map(|(_, v)| v.clone()).collect();
     (names, values)
 }
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use wirefilter_engine::{ExecutionContext, Scheme};
+
+    use crate::waf::data::RequestData;
+
+    pub fn scheme() -> Scheme {
+        crate::waf::scheme::build(&[])
+    }
+
+    /// A fresh context for populating fields. The scheme is cloned internally,
+    /// so the returned context is self-contained (`'static` values).
+    pub fn context(scheme: &Scheme) -> ExecutionContext<'static> {
+        ExecutionContext::new(scheme)
+    }
+
+    /// A `RequestData` with everything empty/defaulted — tests set only the
+    /// fields they care about.
+    pub fn empty_request() -> RequestData {
+        RequestData {
+            client_ip: None,
+            is_tls: false,
+            method: String::new(),
+            version: String::new(),
+            host: String::new(),
+            full_uri: String::new(),
+            uri: String::new(),
+            path: String::new(),
+            query: String::new(),
+            extension: String::new(),
+            headers: Vec::new(),
+            geo: None,
+        }
+    }
+
+    /// Evaluate a boolean expression against a populated context.
+    pub fn check(scheme: &Scheme, ctx: &ExecutionContext<'static>, expr: &str) -> bool {
+        scheme
+            .parse(expr)
+            .expect("expression should parse")
+            .compile()
+            .execute(ctx)
+            .expect("filter should execute")
+    }
+}

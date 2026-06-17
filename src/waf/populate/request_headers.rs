@@ -197,3 +197,130 @@ pub fn request_fields(ctx: &mut ExecutionContext<'static>, scheme: &Scheme, req:
         set_field!(ctx, scheme, "http.request.body.mime", Str, v);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use wirefilter_engine::{ExecutionContext, Scheme};
+
+    use super::request_fields;
+    use crate::waf::data::RequestData;
+    use crate::waf::populate::test_support::{check, context, empty_request, scheme};
+
+    fn populate(req: &RequestData) -> (Scheme, ExecutionContext<'static>) {
+        let scheme = scheme();
+        let mut ctx = context(&scheme);
+        request_fields(&mut ctx, &scheme, req);
+        (scheme, ctx)
+    }
+
+    #[test]
+    fn host_from_header_case_insensitive() {
+        let mut req = empty_request();
+        req.headers.push(("HOST".into(), "example.com".into()));
+        let (scheme, ctx) = populate(&req);
+        assert!(check(&scheme, &ctx, r#"http.host == "example.com""#));
+    }
+
+    #[test]
+    fn host_falls_back_to_host_field() {
+        let mut req = empty_request();
+        req.host = "fallback.com".into();
+        let (scheme, ctx) = populate(&req);
+        assert!(check(&scheme, &ctx, r#"http.host == "fallback.com""#));
+    }
+
+    #[test]
+    fn method_and_tls_flag() {
+        let mut req = empty_request();
+        req.method = "GET".into();
+        req.is_tls = true;
+        let (scheme, ctx) = populate(&req);
+        assert!(check(&scheme, &ctx, r#"http.request.method == "GET""#));
+        assert!(check(&scheme, &ctx, "ssl"));
+    }
+
+    #[test]
+    fn query_string_parsed_into_args() {
+        let mut req = empty_request();
+        req.query = "a=1&b=two".into();
+        let (scheme, ctx) = populate(&req);
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.uri.args.names[*] == "a")"#
+        ));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.uri.args.values[*] == "two")"#
+        ));
+    }
+
+    #[test]
+    fn cookies_parsed() {
+        let mut req = empty_request();
+        req.headers
+            .push(("Cookie".into(), "sid=abc; theme=dark".into()));
+        let (scheme, ctx) = populate(&req);
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.cookies.names[*] == "sid")"#
+        ));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.cookies.values[*] == "dark")"#
+        ));
+    }
+
+    #[test]
+    fn header_arrays_and_named_fields() {
+        let mut req = empty_request();
+        req.headers.push(("User-Agent".into(), "curl/8.0".into()));
+        req.headers.push(("X-Test".into(), "val".into()));
+        let (scheme, ctx) = populate(&req);
+        assert!(check(&scheme, &ctx, r#"http.user_agent == "curl/8.0""#));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.headers.names[*] == "X-Test")"#
+        ));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.headers.values[*] == "val")"#
+        ));
+    }
+
+    #[test]
+    fn accept_language_parsed_dropping_qvalues() {
+        let mut req = empty_request();
+        req.headers
+            .push(("Accept-Language".into(), "en-US,en;q=0.9,fr".into()));
+        let (scheme, ctx) = populate(&req);
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.accepted_languages[*] == "en-US")"#
+        ));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.accepted_languages[*] == "fr")"#
+        ));
+    }
+
+    #[test]
+    fn content_type_sets_mime() {
+        let mut req = empty_request();
+        req.headers
+            .push(("Content-Type".into(), "application/json".into()));
+        let (scheme, ctx) = populate(&req);
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"http.request.body.mime == "application/json""#
+        ));
+    }
+}

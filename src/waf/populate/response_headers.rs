@@ -31,3 +31,37 @@ pub fn response_fields(ctx: &mut ExecutionContext<'static>, scheme: &Scheme, res
     set_field!(ctx, scheme, "http.response.headers.names", Arr, names);
     set_field!(ctx, scheme, "http.response.headers.values", Arr, values);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::response_fields;
+    use crate::waf::data::ResponseData;
+    use crate::waf::populate::test_support::{check, context, scheme};
+
+    #[test]
+    fn status_and_media_type_and_headers() {
+        let resp = ResponseData {
+            status: 200,
+            headers: vec![
+                ("Content-Type".into(), "text/html; charset=utf-8".into()),
+                ("X-Frame-Options".into(), "DENY".into()),
+            ],
+        };
+        let scheme = scheme();
+        let mut ctx = context(&scheme);
+        response_fields(&mut ctx, &scheme, &resp);
+
+        assert!(check(&scheme, &ctx, "http.response.code == 200"));
+        // Media type is extracted without the charset parameter.
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"http.response.content_type.media_type == "text/html""#
+        ));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.response.headers.names[*] == "X-Frame-Options")"#
+        ));
+    }
+}

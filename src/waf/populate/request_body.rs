@@ -83,3 +83,80 @@ pub fn multipart_fields(
         set_field!(ctx, scheme, field, arr_arr_field(parts, extract_fn));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use wirefilter_engine::{ExecutionContext, Scheme};
+
+    use super::{body_fields, multipart_fields};
+    use crate::waf::data::MultipartPartData;
+    use crate::waf::populate::test_support::{check, context, scheme};
+
+    const FORM: &str = "application/x-www-form-urlencoded";
+
+    fn populate_body(
+        body: &[u8],
+        content_type: Option<&str>,
+    ) -> (Scheme, ExecutionContext<'static>) {
+        let scheme = scheme();
+        let mut ctx = context(&scheme);
+        body_fields(&mut ctx, &scheme, body, body.len(), false, content_type);
+        (scheme, ctx)
+    }
+
+    #[test]
+    fn raw_body_size_and_truncated() {
+        let scheme = scheme();
+        let mut ctx = context(&scheme);
+        body_fields(&mut ctx, &scheme, b"hello", 5, true, None);
+        assert!(check(&scheme, &ctx, r#"http.request.body.raw == "hello""#));
+        assert!(check(&scheme, &ctx, "http.request.body.size == 5"));
+        assert!(check(&scheme, &ctx, "http.request.body.truncated"));
+    }
+
+    #[test]
+    fn form_body_parsed_into_fields() {
+        let (scheme, ctx) = populate_body(b"user=admin&pass=secret", Some(FORM));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.body.form.names[*] == "user")"#
+        ));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.body.form.values[*] == "secret")"#
+        ));
+    }
+
+    #[test]
+    fn non_form_content_type_skips_form_parsing() {
+        // Same bytes, but a JSON content-type must not populate form fields.
+        let (scheme, ctx) = populate_body(b"user=admin&pass=secret", Some("application/json"));
+        assert!(!check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.body.form.values[*] == "secret")"#
+        ));
+    }
+
+    #[test]
+    fn multipart_values_populated() {
+        let scheme = scheme();
+        let mut ctx = context(&scheme);
+        let parts = vec![MultipartPartData {
+            name: Some("upload".into()),
+            filename: Some("evil.sh".into()),
+            content_type: Some("text/x-sh".into()),
+            content_disposition: None,
+            content_transfer_encoding: None,
+            value: "rm -rf /".into(),
+        }];
+        multipart_fields(&mut ctx, &scheme, &parts);
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"any(http.request.body.multipart.values[*] == "rm -rf /")"#
+        ));
+    }
+}
