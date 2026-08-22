@@ -7,12 +7,9 @@ mod regex;
 mod string;
 
 use helpers::{BytesPredicateFunction, BytesTransformFunction};
-use wirefilter_engine::{AllFunction, AnyFunction, ConcatFunction};
+use wirefilter_engine::ConcatFunction;
 
 pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
-    // Built-in wirefilter functions
-    b.add_function("any", AnyFunction::default()).unwrap();
-    b.add_function("all", AllFunction::default()).unwrap();
     b.add_function("concat", ConcatFunction::new()).unwrap();
 
     // String transform functions (polymorphic: Bytes|Array<Bytes> ->
