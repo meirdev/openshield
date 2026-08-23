@@ -1,7 +1,4 @@
-use wirefilter_engine::{
-    FunctionArgs, LhsValue, SimpleFunctionArgKind, SimpleFunctionDefinition, SimpleFunctionImpl,
-    SimpleFunctionParam, Type,
-};
+use wirefilter_engine::{FunctionArgs, LhsValue};
 
 pub fn lower(input: &[u8]) -> Vec<u8> {
     input.to_ascii_lowercase()
@@ -59,25 +56,6 @@ pub fn remove_whitespace(input: &[u8]) -> Vec<u8> {
         .copied()
         .filter(|c| !c.is_ascii_whitespace())
         .collect()
-}
-
-pub fn len_def() -> SimpleFunctionDefinition {
-    SimpleFunctionDefinition {
-        params: vec![SimpleFunctionParam {
-            arg_kind: SimpleFunctionArgKind::Field,
-            val_type: Type::Bytes,
-        }],
-        opt_params: vec![],
-        return_type: Type::Int,
-        implementation: SimpleFunctionImpl::new(len_fn),
-    }
-}
-
-fn len_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
-    let LhsValue::Bytes(b) = args.next()?.ok()? else {
-        return None;
-    };
-    Some(LhsValue::Int(b.len() as i64))
 }
 
 pub fn starts_with_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
@@ -148,12 +126,6 @@ mod tests {
         use crate::waf::functions::test_support::eval_bytes;
 
         const HOST: &str = "http.host";
-
-        #[test]
-        fn len_returns_byte_count() {
-            assert!(eval_bytes("len(http.host) == 5", HOST, b"hello"));
-            assert!(eval_bytes("len(http.host) == 0", HOST, b""));
-        }
 
         #[test]
         fn starts_with_literal() {

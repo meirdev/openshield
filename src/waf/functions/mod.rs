@@ -1,6 +1,7 @@
 mod decode;
 mod detect;
 mod encode;
+mod generic;
 pub mod helpers;
 mod json;
 mod regex;
@@ -47,7 +48,7 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
     .unwrap();
 
     // String functions (non-polymorphic)
-    b.add_function("len", string::len_def()).unwrap();
+    b.add_function("len", generic::LenFunction).unwrap();
     b.add_function(
         "starts_with",
         helpers::bytes_bytes_to_bool(string::starts_with_fn),
