@@ -89,6 +89,12 @@ impl Engine {
         }
     }
 
+    /// Rules in `phase`, in execution order (test introspection).
+    #[cfg(test)]
+    pub fn rules_in(&self, phase: &Phase) -> &[CompiledRule] {
+        self.rules.get(phase).map(Vec::as_slice).unwrap_or(&[])
+    }
+
     pub fn evaluate(
         &self,
         phase: &Phase,

@@ -59,6 +59,23 @@ pub struct Config {
     pub challenge: Option<ChallengeConfig>,
 
     #[serde(default)]
+    pub rulesets: Vec<RulesetConfig>,
+
+    #[serde(default)]
+    pub rules: Vec<RuleConfig>,
+}
+
+/// A named container of rules, executed via a rule with `action: execute`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RulesetConfig {
+    pub name: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub description: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub version: Option<String>,
+    #[serde(default)]
     pub rules: Vec<RuleConfig>,
 }
 
@@ -124,6 +141,16 @@ pub struct RuleConfig {
     #[serde(default)]
     #[allow(dead_code)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub r#ref: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub version: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     #[serde(default = "default_phase")]
     pub phase: Phase,
     pub action: Action,
@@ -134,6 +161,17 @@ pub struct RuleConfig {
     pub ratelimit: Option<RateLimitConfig>,
     #[serde(default)]
     pub logging: RuleLoggingConfig,
+}
+
+impl RuleConfig {
+    /// The `execute` guard to AND onto each ruleset rule, or `None` when the
+    /// expression is the literal `true`. Wirefilter has a Bool *type* but no
+    /// boolean *literal* (`true` parses as an unknown identifier), so `true`
+    /// is handled here rather than parsed.
+    pub fn execute_guard(&self) -> Option<&str> {
+        let expr = self.expression.trim();
+        (expr != "true").then_some(expr)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -166,6 +204,7 @@ pub enum Action {
     Allow,
     Score,
     Challenge,
+    Execute,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Default)]
@@ -182,6 +221,80 @@ pub struct ActionParameters {
     pub response: Option<BlockResponse>,
     #[serde(default)]
     pub scores: Vec<ScoreAction>,
+    /// `execute` only: name of the ruleset to run.
+    #[serde(default)]
+    pub id: Option<String>,
+    /// `execute` only: overrides applied to the executed ruleset.
+    #[serde(default)]
+    pub overrides: Option<Overrides>,
+}
+
+/// Overrides for an executed ruleset. Precedence (highest first):
+/// `rules` > `categories` > top-level `action` / `enabled`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Overrides {
+    /// Action to override all rules with.
+    #[serde(default)]
+    pub action: Option<Action>,
+    /// Whether to enable execution of all rules.
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub categories: Vec<CategoryOverride>,
+    #[serde(default)]
+    pub rules: Vec<RuleOverride>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CategoryOverride {
+    pub category: String,
+    #[serde(default)]
+    pub action: Option<Action>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RuleOverride {
+    pub id: String,
+    #[serde(default)]
+    pub action: Option<Action>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+}
+
+impl Overrides {
+    /// Resolve the effective (enabled, action) for `rule` under these
+    /// overrides. Rule-level wins over category-level, which wins over the
+    /// ruleset-wide setting; each layer only replaces what it sets.
+    pub fn resolve(&self, rule: &RuleConfig) -> (bool, Action) {
+        let mut enabled = self.enabled.unwrap_or(rule.enabled);
+        let mut action = self.action.clone().unwrap_or_else(|| rule.action.clone());
+
+        for c in self
+            .categories
+            .iter()
+            .filter(|c| rule.categories.contains(&c.category))
+        {
+            if let Some(e) = c.enabled {
+                enabled = e;
+            }
+            if let Some(ref a) = c.action {
+                action = a.clone();
+            }
+        }
+
+        if let Some(r) = self.rules.iter().find(|r| r.id == rule.id) {
+            if let Some(e) = r.enabled {
+                enabled = e;
+            }
+            if let Some(ref a) = r.action {
+                action = a.clone();
+            }
+        }
+
+        (enabled, action)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -287,36 +400,326 @@ impl Config {
         if self.upstream.is_empty() {
             return Err("upstream address is required".into());
         }
-        for rule in &self.rules {
-            if rule.id.is_empty() {
-                return Err("rule id is required".into());
+        for rs in &self.rulesets {
+            if rs.name.is_empty() {
+                return Err("ruleset name is required".into());
             }
-            if rule.expression.is_empty() {
-                return Err(format!("rule '{}' has empty expression", rule.id).into());
+            if self.rulesets.iter().filter(|r| r.name == rs.name).count() > 1 {
+                return Err(format!("duplicate ruleset name '{}'", rs.name).into());
             }
-            if let Action::Challenge = rule.action {
-                if self.challenge.is_none() {
+            for rule in &rs.rules {
+                if let Action::Execute = rule.action {
                     return Err(format!(
-                        "rule '{}' has action 'challenge' but no challenge config",
-                        rule.id
+                        "rule '{}' in ruleset '{}': 'execute' is not allowed inside a ruleset",
+                        rule.id, rs.name
                     )
                     .into());
                 }
+                self.validate_rule(rule, &rule.action)
+                    .map_err(|e| format!("ruleset '{}': {}", rs.name, e))?;
             }
-            if let Action::Score = rule.action {
+        }
+        for rule in &self.rules {
+            if let Action::Execute = rule.action {
+                self.validate_execute(rule)?;
+            } else {
+                self.validate_rule(rule, &rule.action)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate a rule as if it ran with `action` (which may differ from
+    /// `rule.action` when an `execute` override is applied).
+    fn validate_rule(
+        &self,
+        rule: &RuleConfig,
+        action: &Action,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if rule.id.is_empty() {
+            return Err("rule id is required".into());
+        }
+        if rule.expression.is_empty() {
+            return Err(format!("rule '{}' has empty expression", rule.id).into());
+        }
+        match action {
+            Action::Challenge if self.challenge.is_none() => Err(format!(
+                "rule '{}' has action 'challenge' but no challenge config",
+                rule.id
+            )
+            .into()),
+            Action::Score => {
                 let has_scores = rule
                     .action_parameters
                     .as_ref()
                     .is_some_and(|p| !p.scores.is_empty());
-                if !has_scores {
-                    return Err(format!(
+                if has_scores {
+                    Ok(())
+                } else {
+                    Err(format!(
                         "rule '{}' has action 'score' but no score parameters",
                         rule.id
                     )
-                    .into());
+                    .into())
                 }
+            }
+            Action::Execute => Err(format!(
+                "rule '{}': 'execute' cannot be used as an override action",
+                rule.id
+            )
+            .into()),
+            _ => Ok(()),
+        }
+    }
+
+    fn validate_execute(&self, rule: &RuleConfig) -> Result<(), Box<dyn std::error::Error>> {
+        if rule.id.is_empty() {
+            return Err("rule id is required".into());
+        }
+        if rule.expression.is_empty() {
+            return Err(format!("rule '{}' has empty expression", rule.id).into());
+        }
+        let params = rule.action_parameters.as_ref();
+        let Some(id) = params.and_then(|p| p.id.as_deref()) else {
+            return Err(format!(
+                "rule '{}' has action 'execute' but no action_parameters.id",
+                rule.id
+            )
+            .into());
+        };
+        let Some(ruleset) = self.rulesets.iter().find(|r| r.name == id) else {
+            return Err(format!("rule '{}' executes unknown ruleset '{}'", rule.id, id).into());
+        };
+        let overrides = params.and_then(|p| p.overrides.clone()).unwrap_or_default();
+
+        for o in &overrides.rules {
+            if !ruleset.rules.iter().any(|r| r.id == o.id) {
+                return Err(format!(
+                    "rule '{}' overrides unknown rule '{}' in ruleset '{}'",
+                    rule.id, o.id, id
+                )
+                .into());
+            }
+        }
+        for o in &overrides.categories {
+            if !ruleset
+                .rules
+                .iter()
+                .any(|r| r.categories.contains(&o.category))
+            {
+                return Err(format!(
+                    "rule '{}' overrides unknown category '{}' in ruleset '{}'",
+                    rule.id, o.category, id
+                )
+                .into());
+            }
+        }
+
+        // Every rule must be valid under the action it will actually run with.
+        for rs_rule in &ruleset.rules {
+            let (enabled, action) = overrides.resolve(rs_rule);
+            if enabled {
+                self.validate_rule(rs_rule, &action).map_err(|e| {
+                    format!("rule '{}' (via execute '{}'): {}", rs_rule.id, rule.id, e)
+                })?;
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(yaml: &str) -> Result<Config, Box<dyn std::error::Error>> {
+        let cfg: Config = serde_yaml::from_str(yaml)?;
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    const BASE: &str = r#"
+listen: "127.0.0.1:8080"
+upstream: "http://127.0.0.1:9000"
+scores: [sqli]
+rulesets:
+  - name: crs
+    description: OWASP Core Rule Set
+    version: "4.0.0"
+    rules:
+      - id: "942100"
+        description: SQLi via libinjection
+        ref: https://example.com/942100
+        version: "4.0.0"
+        categories: [attack-sqli, paranoia-level-1]
+        action: block
+        expression: 'http.request.uri.path contains "sqli"'
+      - id: "941100"
+        categories: [attack-xss, paranoia-level-1]
+        action: log
+        expression: 'http.request.uri.path contains "xss"'
+      - id: "920100"
+        categories: [protocol]
+        enabled: false
+        action: block
+        expression: 'http.request.uri.path contains "proto"'
+"#;
+
+    #[test]
+    fn rule_metadata_fields_parse_with_defaults() {
+        let cfg = parse(&format!("{BASE}\nrules: []")).unwrap();
+        let rs = &cfg.rulesets[0];
+        assert_eq!(rs.name, "crs");
+        assert_eq!(rs.version.as_deref(), Some("4.0.0"));
+        let r = &rs.rules[0];
+        assert_eq!(r.r#ref.as_deref(), Some("https://example.com/942100"));
+        assert_eq!(r.categories, vec!["attack-sqli", "paranoia-level-1"]);
+        assert!(r.enabled, "enabled defaults to true");
+        assert!(!rs.rules[2].enabled);
+    }
+
+    #[test]
+    fn execute_requires_known_ruleset() {
+        let err = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\"\n    action_parameters:\n      id: nope"
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("unknown ruleset 'nope'"), "{err}");
+
+        let err = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\""
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("no action_parameters.id"), "{err}");
+    }
+
+    #[test]
+    fn execute_requires_expression_and_true_means_no_guard() {
+        let err = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    action_parameters:\n      id: crs"
+        ))
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("missing field `expression`"),
+            "{err}"
+        );
+
+        let cfg = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\"\n    action_parameters:\n      id: crs"
+        ))
+        .unwrap();
+        assert_eq!(cfg.rules[0].execute_guard(), None);
+
+        let cfg = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: 'http.host == \"x\"'\n    action_parameters:\n      id: crs"
+        ))
+        .unwrap();
+        assert_eq!(cfg.rules[0].execute_guard(), Some(r#"http.host == "x""#));
+    }
+
+    #[test]
+    fn execute_rejects_unknown_override_targets() {
+        let err = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\"\n    action_parameters:\n      id: crs\n      overrides:\n        rules: [{{id: \"000000\", enabled: false}}]"
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("unknown rule '000000'"), "{err}");
+
+        let err = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\"\n    action_parameters:\n      id: crs\n      overrides:\n        categories: [{{category: nope, action: log}}]"
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("unknown category 'nope'"), "{err}");
+    }
+
+    #[test]
+    fn execute_not_allowed_inside_ruleset_or_as_override_action() {
+        let err = parse(
+            r#"
+listen: a
+upstream: b
+rulesets:
+  - name: rs
+    rules:
+      - {id: x, action: execute, expression: "true", action_parameters: {id: rs}}
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("not allowed inside a ruleset"),
+            "{err}"
+        );
+
+        let err = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\"\n    action_parameters:\n      id: crs\n      overrides:\n        action: execute"
+        ))
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("cannot be used as an override action"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn override_to_score_validates_score_parameters() {
+        // 942100 has no score parameters, so overriding it to `score` is invalid.
+        let err = parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\"\n    action_parameters:\n      id: crs\n      overrides:\n        rules: [{{id: \"942100\", action: score}}]"
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("no score parameters"), "{err}");
+
+        // ...unless that rule is disabled by the same overrides.
+        parse(&format!(
+            "{BASE}\nrules:\n  - id: run\n    action: execute\n    expression: \"true\"\n    action_parameters:\n      id: crs\n      overrides:\n        enabled: false\n        rules: [{{id: \"942100\", action: score}}]"
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn override_precedence_rule_over_category_over_global() {
+        let cfg = parse(&format!("{BASE}\nrules: []")).unwrap();
+        let rs = &cfg.rulesets[0];
+        let sqli = &rs.rules[0];
+        let xss = &rs.rules[1];
+        let proto = &rs.rules[2];
+
+        let overrides: Overrides = serde_yaml::from_str(
+            r#"
+action: log
+enabled: false
+categories:
+  - category: paranoia-level-1
+    enabled: true
+    action: challenge
+  - category: attack-xss
+    action: allow
+rules:
+  - id: "942100"
+    action: block
+"#,
+        )
+        .unwrap();
+
+        // rule-level action wins; category-level enabled wins over global.
+        let (en, act) = overrides.resolve(sqli);
+        assert!(en);
+        assert!(matches!(act, Action::Block));
+
+        // both categories match; later category in the list wins for action.
+        let (en, act) = overrides.resolve(xss);
+        assert!(en);
+        assert!(matches!(act, Action::Allow));
+
+        // no category/rule override -> global applies (disabled, log).
+        let (en, act) = overrides.resolve(proto);
+        assert!(!en);
+        assert!(matches!(act, Action::Log));
+
+        // Empty overrides keep the rule's own settings.
+        let (en, act) = Overrides::default().resolve(proto);
+        assert!(!en);
+        assert!(matches!(act, Action::Block));
     }
 }
