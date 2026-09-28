@@ -29,6 +29,14 @@ pub fn build_from_config(lists: &[ListConfig]) -> (IpListMatcher, BytesListMatch
                     list_cfg.items.len()
                 );
             }
+            "phrases" => {
+                bytes_lists.add_phrase_list(&list_cfg.name, &refs);
+                info!(
+                    "Phrase list '{}': {} entries (substring match)",
+                    list_cfg.name,
+                    list_cfg.items.len()
+                );
+            }
             other => {
                 warn!("Unknown list kind '{}' for list '{}'", other, list_cfg.name);
             }

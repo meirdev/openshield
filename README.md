@@ -14,7 +14,7 @@ High-performance reverse proxy with Web Application Firewall (WAF) capabilities,
 - SQL injection and XSS detection via libinjection
 - GeoIP lookups (MaxMind)
 - Score-based threat detection (accumulate across rules)
-- IP and string list matching
+- IP, string (exact), and phrase (substring) list matching
 - Structured logging (JSON/text) with pluggable sinks
 - Prometheus metrics
 
@@ -72,10 +72,16 @@ lists:
       - "10.0.0.0/8"
 
   - name: blocked_ua
-    kind: string
+    kind: string # exact match: `x in $blocked_ua` is true when x equals a member
     items:
       - "sqlmap"
       - "nikto"
+
+  - name: scanner_signatures
+    kind: phrases # substring match: `x in $scanner_signatures` is true when a
+    items: # phrase occurs anywhere in x (case-insensitive; ModSecurity `@pm`)
+      - "nikto"
+      - "sqlmap"
 
 rules:
   - id: detect-sqli
@@ -150,6 +156,65 @@ Rules execute in order within each phase:
 | `log`       | Record to audit log, continue processing |
 | `score`     | Increment score counters                 |
 | `challenge` | Issue Turnstile challenge (see below)    |
+| `execute`   | Run a ruleset (see below)                |
+
+### Rule Metadata
+
+Every rule accepts these optional fields:
+
+| Field         | Type       | Description                                                  |
+| ------------- | ---------- | ------------------------------------------------------------ |
+| `description` | `string`   | Human-readable description                                   |
+| `categories`  | `string[]` | Tags used by `execute` overrides (e.g. `attack-sqli`)        |
+| `ref`         | `string`   | External reference (URL, upstream rule id)                   |
+| `version`     | `string`   | Rule version                                                 |
+| `enabled`     | `bool`     | Whether the rule runs (default: `true`)                      |
+
+### Rulesets
+
+A ruleset is a named container of rules (`name`, `description`, `version`,
+`rules`). Rulesets do nothing on their own — a top-level rule with
+`action: execute` runs one, expanding its rules in place (in order, at the
+position of the `execute` rule). Rulesets cannot contain `execute` rules.
+
+```yaml
+rulesets:
+  - name: crs
+    description: OWASP Core Rule Set
+    version: "4.0.0"
+    rules:
+      - id: "942100"
+        description: SQL Injection Attack Detected via libinjection
+        categories: [attack-sqli, paranoia-level-1]
+        ref: https://github.com/coreruleset/coreruleset
+        action: block
+        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+
+rules:
+  - id: run-crs
+    action: execute
+    # ANDed onto every rule in the ruleset; use "true" to run unconditionally.
+    expression: 'not ip.src in $allowed_ips'
+    action_parameters:
+      id: crs
+      overrides:
+        action: log          # override action for all rules (lowest precedence)
+        enabled: true        # enable/disable all rules (lowest precedence)
+        categories:          # category-level overrides
+          - category: paranoia-level-2
+            enabled: false
+          - category: attack-sqli
+            action: block
+        rules:               # rule-level overrides (highest precedence)
+          - id: "942100"
+            action: challenge
+```
+
+Override precedence is `rules` > `categories` > top-level `action`/`enabled`;
+each level only replaces the settings it specifies. When several categories
+match a rule, later entries in the list win. An overridden action must still be
+valid for the rule (e.g. overriding to `score` requires the rule to have score
+parameters); this is checked at config load time.
 
 ### Rate Limiting
 
@@ -208,6 +273,14 @@ Rate limit counters are preserved across in-process config reloads (SIGHUP).
 | `utf8_to_unicode`                                | UTF-8 to \uXXXX                     |
 | `remove_nulls`, `replace_nulls`                  | Null byte handling                  |
 | `remove_whitespace`                              | Strip all ASCII whitespace          |
+| `js_decode`                                      | Decode JS escapes (\x, \u, octal, \n…) |
+| `css_decode`                                     | Decode CSS escapes (\HH…, backslash) |
+| `cmd_line`                                       | Normalise obfuscated command lines  |
+| `remove_comments`                                | Strip C/HTML/SQL/shell comments     |
+| `replace_comments`                               | Replace `/* */` comments with a space |
+| `compress_whitespace`                            | Collapse whitespace runs to one space |
+| `escape_seq_decode`                              | Decode ANSI-C escapes (\n, \xHH, octal) |
+| `normalize_path`, `normalize_path_win`           | Resolve `.`/`..`/`//` in a path     |
 | `regex_replace(field, "pattern", "replacement")` | Regex substitution (pattern cached) |
 
 **Detection**:
@@ -221,10 +294,11 @@ Rate limit counters are preserved across in-process config reloads (SIGHUP).
 
 | Function                          | Description                           |
 | --------------------------------- | ------------------------------------- |
-| `len(field)`                      | String length                         |
+| `len(field)`                      | Byte length of a string, or number of elements in an array |
 | `starts_with(field, "prefix")`    | Prefix check                          |
 | `ends_with(field, "suffix")`      | Suffix check                          |
 | `regex_capture(field, "pattern")` | Regex capture groups (pattern cached) |
+| `regex_match(field, r#"pattern"#)` | Regex test, same semantics as `matches`; compiled patterns are shared process-wide, so repeating a pattern across targets/rules costs one regex |
 
 **Built-in**:
 

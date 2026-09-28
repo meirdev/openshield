@@ -55,6 +55,11 @@ pub fn compile(
         )?);
     }
 
+    debug!(
+        "regex_match cache holds {} unique patterns",
+        crate::waf::functions::regex_match_cache_size()
+    );
+
     Ok(Engine::new(rules, mgr, config.logging.log_payloads))
 }
 

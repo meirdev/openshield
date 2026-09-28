@@ -8,6 +8,7 @@ mod regex;
 mod string;
 
 use helpers::{BytesPredicateFunction, BytesTransformFunction};
+pub use regex::match_cache_size as regex_match_cache_size;
 use wirefilter_engine::ConcatFunction;
 
 pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
@@ -44,6 +45,51 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
     b.add_function(
         "remove_whitespace",
         BytesTransformFunction::new("remove_whitespace", string::remove_whitespace),
+    )
+    .unwrap();
+    b.add_function(
+        "js_decode",
+        BytesTransformFunction::new("js_decode", string::js_decode),
+    )
+    .unwrap();
+    b.add_function(
+        "css_decode",
+        BytesTransformFunction::new("css_decode", string::css_decode),
+    )
+    .unwrap();
+    b.add_function(
+        "cmd_line",
+        BytesTransformFunction::new("cmd_line", string::cmd_line),
+    )
+    .unwrap();
+    b.add_function(
+        "remove_comments",
+        BytesTransformFunction::new("remove_comments", string::remove_comments),
+    )
+    .unwrap();
+    b.add_function(
+        "replace_comments",
+        BytesTransformFunction::new("replace_comments", string::replace_comments),
+    )
+    .unwrap();
+    b.add_function(
+        "compress_whitespace",
+        BytesTransformFunction::new("compress_whitespace", string::compress_whitespace),
+    )
+    .unwrap();
+    b.add_function(
+        "escape_seq_decode",
+        BytesTransformFunction::new("escape_seq_decode", string::escape_seq_decode),
+    )
+    .unwrap();
+    b.add_function(
+        "normalize_path",
+        BytesTransformFunction::new("normalize_path", string::normalize_path_transform),
+    )
+    .unwrap();
+    b.add_function(
+        "normalize_path_win",
+        BytesTransformFunction::new("normalize_path_win", string::normalize_path_win),
     )
     .unwrap();
 
@@ -115,6 +161,8 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
     .unwrap();
 
     // Regex (patterns compiled once at rule-compile time)
+    b.add_function("regex_match", regex::RegexMatchFunction)
+        .unwrap();
     b.add_function("regex_capture", regex::RegexCaptureFunction)
         .unwrap();
     b.add_function("regex_replace", regex::RegexReplaceFunction)
