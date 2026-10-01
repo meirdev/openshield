@@ -102,8 +102,8 @@ impl RateLimitManager {
     }
 
     pub fn add_rule(&mut self, rule_id: &str, config: &RateLimitConfig) {
-        // Only create new limiter if rule doesn't already exist (preserves state across
-        // reloads)
+        // Only create new limiter if rule doesn't already exist (preserves
+        // state across reloads)
         if !self.limiters.contains_key(rule_id) {
             self.limiters
                 .insert(rule_id.to_string(), RuleLimiter::new(config));

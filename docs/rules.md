@@ -1,18 +1,99 @@
 # Rules
 
-Each rule needs an `id`, an `action`, and a Wirefilter `expression`. Add rules to the configuration in the order they should run:
+Rules live in rulesets. Each rule needs an `id`, an `action`, and a Wirefilter `expression`. Add rules to a ruleset with `kind: root` in the order they should run:
 
 ```yaml
-rules:
-  - id: block-admin
-    phase: request_headers
-    action: block
-    expression: 'http.request.uri.path == "/admin"'
+rulesets:
+  - name: main
+    kind: root
+    rules:
+      - id: block-admin
+        phase: request_headers
+        action: block
+        expression: 'http.request.uri.path == "/admin"'
 ```
+
+Every rule also accepts these optional fields:
+
+| Field         | Default | Description                                            |
+| ------------- | ------- | ------------------------------------------------------ |
+| `description` | Omitted | Human-readable description                             |
+| `categories`  | `[]`    | Tags that [`execute` overrides](#overrides) can target |
+| `ref`         | Omitted | External reference, such as a URL or upstream rule ID  |
+| `version`     | Omitted | Rule version                                           |
+| `enabled`     | `true`  | Set to `false` to skip the rule                        |
+
+## Rulesets
+
+A ruleset is a named list of rules. Its `kind` decides when the rules run:
+
+| Kind      | Runs                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------- |
+| `root`    | On every request. Root rulesets run in configuration order                                  |
+| `custom`  | Only when a root rule runs it with `action: execute`. This is the default                   |
+| `managed` | Same as `custom`. Use it to mark rulesets maintained elsewhere, such as a vendored rule set |
+
+Ruleset names must be unique. `description` and `version` are optional.
+
+A root rule with `action: execute` runs the custom or managed ruleset named in `action_parameters.id`. The ruleset’s rules take the place of the `execute` rule, in order, and each keeps its own phase:
+
+```yaml
+rulesets:
+  - name: managed
+    description: Shared detection rules
+    version: "1.0.0"
+    rules:
+      - id: sqli-args
+        categories: [sqli]
+        action: block
+        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+      - id: xss-args
+        categories: [xss]
+        action: block
+        expression: "any(detect_xss(url_decode_uni(http.request.uri.args.values[*])))"
+
+  - name: main
+    kind: root
+    rules:
+      - id: block-admin
+        action: block
+        expression: 'http.request.uri.path == "/admin"'
+      - id: run-managed
+        action: execute
+        expression: "not ip.src in $allowed_ips"
+        action_parameters:
+          id: managed
+```
+
+The `execute` rule’s expression is added to every rule it runs: a rule from the ruleset matches only when both expressions match. Use `expression: "true"` to run the ruleset unconditionally.
+
+Only root rulesets can contain `execute` rules, and they can only execute custom and managed rulesets. A custom or managed ruleset that no rule executes never runs; OpenShield logs a warning for it at startup.
+
+### Overrides
+
+Add `action_parameters.overrides` to change the action of the executed rules or to enable and disable them, without editing the ruleset:
+
+```yaml
+action_parameters:
+  id: managed
+  overrides:
+    action: log # all rules
+    enabled: true
+    categories:
+      - category: sqli
+        action: block
+    rules:
+      - id: xss-args
+        enabled: false
+```
+
+Rule overrides take precedence over category overrides, which take precedence over the top-level `action` and `enabled`. Each level changes only the settings it specifies. When several categories match a rule, the later entry wins.
+
+An override must name a rule ID or category that exists in the ruleset, and the resulting action must be valid for the rule: overriding to `score` requires the rule to define `action_parameters.scores`, and overriding to `challenge` requires a `challenge` block. `execute` cannot be used as an override action.
 
 ## Phases
 
-Rules run in configuration order within each phase. The default phase is `request_headers`.
+Rules run in configuration order within each phase, with executed rulesets expanded in place. The default phase is `request_headers`.
 
 | Phase              | Runs when                         | Adds inspection data                              |
 | ------------------ | --------------------------------- | ------------------------------------------------- |
@@ -33,6 +114,7 @@ Body rules inspect up to the configured buffer limit. Response body rules also r
 | `log`       | Record the match and continue                   |
 | `score`     | Update per-request scores and continue          |
 | `challenge` | Require [Turnstile verification](challenges.md) |
+| `execute`   | Run a [custom or managed ruleset](#rulesets)    |
 
 Enforcement depends on the phase: request header and body rules can block requests; response body rules can replace or suppress the body but cannot change headers already sent. Challenges are served in `request_headers`. The `response_headers` and `logging` phases record matches and update scores without enforcing blocks or challenges.
 
@@ -92,20 +174,23 @@ Score fields are refreshed at the start of each phase. Evaluate a threshold in a
 
 ```yaml
 scores: [sqli]
-rules:
-  - id: score-sqli
-    phase: request_headers
-    action: score
-    expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
-    action_parameters:
-      scores:
-        - name: sqli
-          increment: 10
+rulesets:
+  - name: main
+    kind: root
+    rules:
+      - id: score-sqli
+        phase: request_headers
+        action: score
+        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        action_parameters:
+          scores:
+            - name: sqli
+              increment: 10
 
-  - id: block-sqli-score
-    phase: request_body
-    action: block
-    expression: "score.sqli >= 10"
+      - id: block-sqli-score
+        phase: request_body
+        action: block
+        expression: "score.sqli >= 10"
 ```
 
 ## Rate limiting
@@ -113,15 +198,18 @@ rules:
 Add `ratelimit` to count matches per key. The rule’s action runs only after the limit is exceeded. This example blocks an IP after more than 100 matching requests in the configured 60-second period:
 
 ```yaml
-rules:
-  - id: rate-limit-api
-    action: block
-    expression: 'starts_with(http.request.uri.path, "/api/")'
-    ratelimit:
-      characteristics: [ip.src]
-      period: 60
-      requests_per_period: 100
-      mitigation_timeout: 120
+rulesets:
+  - name: main
+    kind: root
+    rules:
+      - id: rate-limit-api
+        action: block
+        expression: 'starts_with(http.request.uri.path, "/api/")'
+        ratelimit:
+          characteristics: [ip.src]
+          period: 60
+          requests_per_period: 100
+          mitigation_timeout: 120
 ```
 
 | Parameter             | Meaning                                                                    |

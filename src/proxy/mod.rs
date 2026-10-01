@@ -520,8 +520,9 @@ impl ProxyHttp for ReverseProxyHandler {
         end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
-        // Fast path: no RequestBody-phase rules. Stream chunks through unchanged,
-        // keeping a capped copy for audit/field population (original behavior).
+        // Fast path: no RequestBody-phase rules. Stream chunks through
+        // unchanged, keeping a capped copy for audit/field population
+        // (original behavior).
         if !self.has_request_body_rules {
             if let Some(data) = body.as_ref() {
                 BYTES_RECEIVED.inc_by(data.len() as u64);
@@ -536,7 +537,8 @@ impl ProxyHttp for ReverseProxyHandler {
             return Ok(());
         }
 
-        // Already released to upstream (process_partial past the limit): pass through.
+        // Already released to upstream (process_partial past the limit): pass
+        // through.
         if ctx.req_passthrough {
             if let Some(data) = body.as_ref() {
                 BYTES_RECEIVED.inc_by(data.len() as u64);
@@ -544,7 +546,8 @@ impl ProxyHttp for ReverseProxyHandler {
             return Ok(());
         }
 
-        // Inspection mode: accumulate and withhold from upstream until a verdict.
+        // Inspection mode: accumulate and withhold from upstream until a
+        // verdict.
         if let Some(data) = body.as_ref() {
             BYTES_RECEIVED.inc_by(data.len() as u64);
             ctx.req_body.feed(data);
@@ -570,11 +573,13 @@ impl ProxyHttp for ReverseProxyHandler {
                     finalize_request_body(self, session, ctx).await;
                     if let Some(pb) = evaluate_body_phase(self, ctx, &Phase::RequestBody) {
                         ctx.pending_block = Some(pb);
-                        // Status/content come from pending_block in fail_to_proxy; the
-                        // error code here only signals "abort proxying".
+                        // Status/content come from pending_block in
+                        // fail_to_proxy; the error code
+                        // here only signals "abort proxying".
                         return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(403)));
                     }
-                    // Allowed: release what we buffered, stream the remainder uninspected.
+                    // Allowed: release what we buffered, stream the remainder
+                    // uninspected.
                     *body = Some(bytes::Bytes::from(std::mem::take(
                         &mut ctx.req_body_pending,
                     )));
@@ -600,7 +605,8 @@ impl ProxyHttp for ReverseProxyHandler {
         }
 
         // Withhold this chunk. An empty chunk (not None) avoids signalling
-        // end-of-body to the upstream (`upstream_end_of_body = end || data.is_none()`).
+        // end-of-body to the upstream (`upstream_end_of_body = end ||
+        // data.is_none()`).
         *body = Some(bytes::Bytes::new());
         Ok(())
     }
@@ -614,7 +620,8 @@ impl ProxyHttp for ReverseProxyHandler {
     where
         Self::CTX: Send + Sync,
     {
-        // A body-phase rule asked to block: render the configured block response.
+        // A body-phase rule asked to block: render the configured block
+        // response.
         if let Some(pb) = ctx.pending_block.take() {
             let code = pb.status_code;
             send_block_response(
@@ -692,7 +699,8 @@ impl ProxyHttp for ReverseProxyHandler {
         populate::response_fields(&mut ctx.exec_ctx, &self.scheme, &resp_data);
         evaluate_phase(self, ctx, &Phase::ResponseHeaders);
         // If a ResponseBody rule might rewrite/suppress the body, drop
-        // Content-Length so the (possibly altered) body can be re-framed as chunked.
+        // Content-Length so the (possibly altered) body can be re-framed as
+        // chunked.
         if self.inspect_response_body && self.has_response_body_rules {
             upstream_response.remove_header(http::header::CONTENT_LENGTH.as_str());
         }
@@ -707,7 +715,8 @@ impl ProxyHttp for ReverseProxyHandler {
         ctx: &mut Self::CTX,
     ) -> Result<Option<std::time::Duration>> {
         // Fast path: not inspecting, or no ResponseBody rules to act on. Stream
-        // through, evaluating only for side effects (score/log/payload), as before.
+        // through, evaluating only for side effects (score/log/payload), as
+        // before.
         if !self.inspect_response_body || !self.has_response_body_rules {
             if let Some(data) = body.as_ref() {
                 BYTES_SENT.inc_by(data.len() as u64);
@@ -737,7 +746,8 @@ impl ProxyHttp for ReverseProxyHandler {
             return Ok(None);
         }
 
-        // Inspection mode: accumulate and withhold from downstream until a verdict.
+        // Inspection mode: accumulate and withhold from downstream until a
+        // verdict.
         if let Some(data) = body.as_ref() {
             ctx.res_body.feed(data);
             ctx.res_body_pending.extend_from_slice(data);
@@ -761,7 +771,8 @@ impl ProxyHttp for ReverseProxyHandler {
                         suppress_response_body(body, ctx, pb);
                         return Ok(None);
                     }
-                    // Allowed: release buffered bytes, stream the remainder uninspected.
+                    // Allowed: release buffered bytes, stream the remainder
+                    // uninspected.
                     let pending = std::mem::take(&mut ctx.res_body_pending);
                     BYTES_SENT.inc_by(pending.len() as u64);
                     *body = Some(bytes::Bytes::from(pending));
