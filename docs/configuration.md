@@ -6,7 +6,7 @@ OpenShield reads YAML from `config.yaml`, or the file passed with `-c`:
 ./target/release/openshield -c config.yaml
 ```
 
-Only `listen` and `upstream` are required. Without rules, OpenShield forwards requests without WAF inspection.
+Only `listen` and `upstream` are required. Without a root ruleset, OpenShield forwards requests without WAF inspection.
 
 ```yaml
 listen: "127.0.0.1:8080"
@@ -88,6 +88,6 @@ See [operations](operations.md) for log contents, application log levels, and me
 
 ## Rules and challenges
 
-Define WAF behavior with `rules`, named IP or string collections with `lists`, and per-request counters with `scores`. See [rules](rules.md) for examples and the expression reference.
+Define WAF behavior with `rulesets`, named IP or string collections with `lists`, and per-request counters with `scores`. See [rules](rules.md) for examples and the expression reference.
 
 Rules with `action: challenge` also require a `challenge` block. See [Turnstile challenges](challenges.md) for setup.

@@ -12,11 +12,14 @@ challenge:
   turnstile_secret_key: "your-secret-key"
   cookie_secret: "your-random-cookie-signing-secret"
 
-rules:
-  - id: challenge-admin
-    phase: request_headers
-    action: challenge
-    expression: 'starts_with(http.request.uri.path, "/admin/")'
+rulesets:
+  - name: main
+    kind: root
+    rules:
+      - id: challenge-admin
+        phase: request_headers
+        action: challenge
+        expression: 'starts_with(http.request.uri.path, "/admin/")'
 ```
 
 | Setting                | Default                   | Purpose                                      |
