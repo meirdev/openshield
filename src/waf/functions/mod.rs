@@ -51,6 +51,11 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
         BytesTransformFunction::new("compress_whitespace", string::compress_whitespace),
     )
     .unwrap();
+    b.add_function(
+        "replace_comments",
+        BytesTransformFunction::new("replace_comments", string::replace_comments),
+    )
+    .unwrap();
 
     // String functions (non-polymorphic)
     b.add_function("len", generic::LenFunction).unwrap();

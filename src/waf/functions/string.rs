@@ -72,6 +72,23 @@ pub fn compress_whitespace(input: &[u8]) -> Vec<u8> {
     out
 }
 
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+pub fn replace_comments(input: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(start) = find(rest, b"/*") {
+        out.extend_from_slice(&rest[..start]);
+        out.push(b' ');
+        let body = &rest[start + 2..];
+        rest = find(body, b"*/").map_or(&[][..], |end| &body[end + 2..]);
+    }
+    out.extend_from_slice(rest);
+    out
+}
+
 pub fn starts_with_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
     let LhsValue::Bytes(input) = args.next()?.ok()? else {
         return None;
@@ -142,6 +159,27 @@ mod tests {
         assert_eq!(compress_whitespace(b"a\tb\nc"), b"a b c");
         assert_eq!(compress_whitespace(b"nospace"), b"nospace");
         assert_eq!(compress_whitespace(b""), b"");
+    }
+
+    #[test]
+    fn replace_comments_replaces_each_with_one_space() {
+        assert_eq!(replace_comments(b"UN/**/ION/* x */SELECT"), b"UN ION SELECT");
+        assert_eq!(replace_comments(b"a/* 1 *//* 2 */b"), b"a  b");
+        assert_eq!(replace_comments(b"a/* line\nbreak */b"), b"a b");
+        assert_eq!(replace_comments(b"no comments"), b"no comments");
+        assert_eq!(replace_comments(b""), b"");
+    }
+
+    #[test]
+    fn replace_comments_edge_cases() {
+        // Unterminated comment swallows the rest of the input.
+        assert_eq!(replace_comments(b"a/* b"), b"a ");
+        // `/*/` opens a comment but does not close it.
+        assert_eq!(replace_comments(b"a/*/b"), b"a ");
+        // A standalone `*/` is left alone.
+        assert_eq!(replace_comments(b"a*/b"), b"a*/b");
+        // Comments do not nest: the first `*/` closes.
+        assert_eq!(replace_comments(b"a/* /* */b*/"), b"a b*/");
     }
 
     #[test]
