@@ -58,6 +58,20 @@ pub fn remove_whitespace(input: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+/// Unlike `u8::is_ascii_whitespace`, this includes vertical tab (0x0B).
+const fn is_space(c: u8) -> bool {
+    matches!(c, b' ' | b'\t'..=b'\r')
+}
+
+pub fn compress_whitespace(input: &[u8]) -> Vec<u8> {
+    let mut out: Vec<u8> = input
+        .iter()
+        .map(|&c| if is_space(c) { b' ' } else { c })
+        .collect();
+    out.dedup_by(|a, b| *a == b' ' && *b == b' ');
+    out
+}
+
 pub fn starts_with_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
     let LhsValue::Bytes(input) = args.next()?.ok()? else {
         return None;
@@ -118,6 +132,25 @@ mod tests {
     fn remove_whitespace_strips_interior_too() {
         assert_eq!(remove_whitespace(b" a b\tc\n"), b"abc");
         assert_eq!(remove_whitespace(b"nospace"), b"nospace");
+    }
+
+    #[test]
+    fn compress_whitespace_collapses_runs() {
+        assert_eq!(compress_whitespace(b"a  b \t\r\n c"), b"a b c");
+        assert_eq!(compress_whitespace(b"  a  "), b" a ");
+        // A lone whitespace byte is still normalized to a space.
+        assert_eq!(compress_whitespace(b"a\tb\nc"), b"a b c");
+        assert_eq!(compress_whitespace(b"nospace"), b"nospace");
+        assert_eq!(compress_whitespace(b""), b"");
+    }
+
+    #[test]
+    fn compress_whitespace_uses_c_isspace() {
+        // Vertical tab and form feed are whitespace for C `isspace`.
+        assert_eq!(compress_whitespace(b"a\x0b\x0cb"), b"a b");
+        // NUL and NBSP (0xA0) are not.
+        assert_eq!(compress_whitespace(b"a\0\0b"), b"a\0\0b");
+        assert_eq!(compress_whitespace(b"a\xa0\xa0b"), b"a\xa0\xa0b");
     }
 
     // Expression-level tests: confirm the functions are registered and wired

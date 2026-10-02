@@ -239,6 +239,7 @@ Transforms and detection functions accept a string or an array of strings. Use `
 | `utf8_to_unicode`                                | UTF-8 to `\uXXXX` escapes                     |
 | `remove_nulls`, `replace_nulls`                  | Remove null bytes or replace them with spaces |
 | `remove_whitespace`                              | Strip all ASCII whitespace                    |
+| `compress_whitespace`                            | Collapse each whitespace run into one space   |
 | `regex_replace(field, "pattern", "replacement")` | Regex substitution (pattern cached)           |
 
 ### Detection
