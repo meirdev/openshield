@@ -5,6 +5,7 @@ use wirefilter_engine::Scheme;
 
 use crate::config;
 use crate::waf::engine::{Action, CompiledRule, Engine, Phase};
+use crate::waf::functions::RuleCompiler;
 use crate::waf::payload;
 use crate::waf::ratelimit::RateLimitManager;
 
@@ -100,7 +101,7 @@ fn compile_rule(
         .parse(&expression)
         .map_err(|e| format!("Failed to parse rule '{}': {}", rule_cfg.id, e))?;
     let log_fields = payload::referenced_fields(&ast);
-    let filter = ast.compile();
+    let filter = ast.compile_with_compiler(&mut RuleCompiler::new(scheme));
 
     let phase = convert_phase(&rule_cfg.phase);
     let action = convert_action(rule_cfg, action)?;
@@ -191,7 +192,7 @@ mod tests {
 
     fn load(yaml: &str) -> Result<Engine, Box<dyn std::error::Error>> {
         let cfg: config::Config = serde_yaml::from_str(yaml)?;
-        let scheme = crate::waf::scheme::build(&cfg.scores);
+        let scheme = crate::waf::scheme::build(&cfg.scores, &cfg.token_ids());
         compile(&cfg, &scheme, None)
     }
 
@@ -347,7 +348,7 @@ rulesets:
 "#
         ))
         .unwrap();
-        let scheme = crate::waf::scheme::build(&cfg.scores);
+        let scheme = crate::waf::scheme::build(&cfg.scores, &cfg.token_ids());
         let engine = compile(&cfg, &scheme, None).unwrap();
 
         // The constant is not a payload field.
@@ -368,6 +369,93 @@ rulesets:
             crate::waf::engine::RuleAction::Block { rule_id, .. } => assert_eq!(rule_id, "1"),
             _ => panic!("expected Block by rule '1'"),
         }
+    }
+
+    fn jwt_config(rules: &str) -> config::Config {
+        use crate::waf::jwt::test_support::hs256_config;
+
+        serde_yaml::from_str(&format!(
+            "listen: a\nupstream: b\ntoken_configurations:{}rulesets:\n  - name: main\n    kind: \
+             root\n    rules:\n{rules}",
+            hs256_config("api")
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn jwt_rules_gate_requests_on_token_and_claims() {
+        use serde_json::json;
+
+        use crate::waf::engine::RuleAction;
+        use crate::waf::jwt::JwtValidator;
+        use crate::waf::jwt::test_support::hs256_token;
+        use crate::waf::populate;
+
+        let cfg = jwt_config(
+            r#"
+      - id: require-jwt
+        action: block
+        expression: 'not is_jwt_valid("api")'
+      - id: admins-only
+        action: block
+        expression: 'http.request.uri.path == "/admin" and not any(http.request.jwt.claims.aud["api"][*] == "admin")'
+"#,
+        );
+        let scheme = crate::waf::scheme::build(&cfg.scores, &cfg.token_ids());
+        let engine = compile(&cfg, &scheme, None).unwrap();
+        let jwt = JwtValidator::new(&cfg.token_configurations, &scheme).unwrap();
+
+        // The ID of the rule that blocks the request, if any.
+        let blocked_by = |path: &str, authorization: Option<&str>| {
+            let mut req = populate::test_support::empty_request();
+            req.path = path.into();
+            if let Some(value) = authorization {
+                req.headers.push(("authorization".into(), value.into()));
+            }
+            let mut ctx = crate::waf::scheme::new_context(&scheme);
+            populate::request_fields(&mut ctx, &scheme, &req);
+            let outcomes = jwt.evaluate(&ctx);
+            populate::jwt_fields(&mut ctx, &scheme, &outcomes);
+            match engine.evaluate(
+                &Phase::RequestHeaders,
+                &ctx,
+                &mut Default::default(),
+                &mut Vec::new(),
+                &mut Default::default(),
+            ) {
+                RuleAction::Block { rule_id, .. } => Some(rule_id),
+                _ => None,
+            }
+        };
+        let require_jwt = Some("require-jwt".to_string());
+
+        assert_eq!(blocked_by("/", None), require_jwt);
+        assert_eq!(blocked_by("/", Some("Bearer junk")), require_jwt);
+
+        let user = format!("Bearer {}", hs256_token(&json!({"aud": "users"})));
+        assert_eq!(blocked_by("/", Some(&user)), None);
+        assert_eq!(
+            blocked_by("/admin", Some(&user)),
+            Some("admins-only".to_string())
+        );
+
+        let admin = hs256_token(&json!({"aud": ["users", "admin"]}));
+        assert_eq!(blocked_by("/admin", Some(&admin)), None);
+    }
+
+    #[test]
+    fn jwt_rule_with_unknown_token_configuration_fails_to_compile() {
+        let cfg = jwt_config(
+            "      - id: typo\n        action: block\n        expression: 'not \
+             is_jwt_valid(\"apii\")'\n",
+        );
+        let scheme = crate::waf::scheme::build(&cfg.scores, &cfg.token_ids());
+        let err = match compile(&cfg, &scheme, None) {
+            Ok(_) => panic!("expected parse error"),
+            Err(e) => e.to_string(),
+        };
+        assert!(err.contains("Failed to parse rule 'typo'"), "{err}");
+        assert!(err.contains("unknown token configuration 'apii'"), "{err}");
     }
 
     #[test]

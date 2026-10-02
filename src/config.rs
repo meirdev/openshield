@@ -59,12 +59,27 @@ pub struct Config {
     pub challenge: Option<ChallengeConfig>,
 
     #[serde(default)]
+    pub token_configurations: Vec<TokenConfig>,
+
+    #[serde(default)]
     pub rulesets: Vec<RulesetConfig>,
 }
 
-/// A named container of rules. `root` rulesets run on every request;
-/// `custom` and `managed` rulesets run only via a root rule with
-/// `action: execute`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TokenConfig {
+    pub id: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub description: Option<String>,
+    pub token_sources: Vec<String>,
+    pub credentials: TokenCredentials,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TokenCredentials {
+    pub keys: Vec<jsonwebtoken::jwk::Jwk>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RulesetConfig {
     pub name: String,
@@ -385,6 +400,13 @@ fn default_increment() -> i64 {
 }
 
 impl Config {
+    pub fn token_ids(&self) -> Vec<String> {
+        self.token_configurations
+            .iter()
+            .map(|t| t.id.clone())
+            .collect()
+    }
+
     pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
         let config: Config = serde_yaml::from_str(&content)?;
@@ -398,6 +420,26 @@ impl Config {
         }
         if self.upstream.is_empty() {
             return Err("upstream address is required".into());
+        }
+        for tc in &self.token_configurations {
+            if tc.id.is_empty() {
+                return Err("token configuration id is required".into());
+            }
+            if self
+                .token_configurations
+                .iter()
+                .filter(|t| t.id == tc.id)
+                .count()
+                > 1
+            {
+                return Err(format!("duplicate token configuration id '{}'", tc.id).into());
+            }
+            if tc.token_sources.is_empty() {
+                return Err(format!("token configuration '{}' has no token_sources", tc.id).into());
+            }
+            if tc.credentials.keys.is_empty() {
+                return Err(format!("token configuration '{}' has no keys", tc.id).into());
+            }
         }
         for rs in &self.rulesets {
             if rs.name.is_empty() {
@@ -596,6 +638,76 @@ rulesets:
         assert_eq!(r.categories, vec!["attack-sqli", "paranoia-level-1"]);
         assert!(r.enabled, "enabled defaults to true");
         assert!(!rs.rules[2].enabled);
+    }
+
+    const TOKEN_CONFIG: &str = r#"
+listen: a
+upstream: b
+token_configurations:
+  - id: api
+    description: Tokens issued by the auth service
+    token_sources:
+      - 'http.request.headers["authorization"][0]'
+      - 'http.request.cookies["Authorization"][0]'
+    credentials:
+      keys:
+        - kty: EC
+          use: sig
+          crv: P-256
+          kid: ec-1
+          x: QG3VFVwUX4IatQvBy7sqBvvmticCZ-eX5-nbtGKBOfI
+          y: A3PXCshn7XcG7Ivvd2K_DerW4LHAlIVKdqhrUnczTD0
+          alg: ES256
+        - {kty: oct, kid: hs-1, alg: HS256, k: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}
+"#;
+
+    #[test]
+    fn token_configuration_parses_jwks() {
+        use jsonwebtoken::jwk::{AlgorithmParameters, KeyAlgorithm};
+
+        let cfg = parse(TOKEN_CONFIG).unwrap();
+        let tc = &cfg.token_configurations[0];
+        assert_eq!(tc.id, "api");
+        assert_eq!(tc.token_sources.len(), 2);
+
+        let keys = &tc.credentials.keys;
+        assert_eq!(keys[0].common.key_id.as_deref(), Some("ec-1"));
+        assert_eq!(keys[0].common.key_algorithm, Some(KeyAlgorithm::ES256));
+        assert!(matches!(
+            keys[0].algorithm,
+            AlgorithmParameters::EllipticCurve(_)
+        ));
+        assert!(matches!(
+            keys[1].algorithm,
+            AlgorithmParameters::OctetKey(_)
+        ));
+    }
+
+    #[test]
+    fn token_configuration_requires_unique_id_sources_and_keys() {
+        let duplicate = format!(
+            "{TOKEN_CONFIG}  - id: api\n    token_sources: [http.host]\n    credentials: {{keys: \
+             []}}\n"
+        );
+        let err = parse(&duplicate).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("duplicate token configuration id 'api'"),
+            "{err}"
+        );
+
+        let base = "listen: a\nupstream: b\ntoken_configurations:\n";
+        let err = parse(&format!(
+            "{base}  - {{id: x, token_sources: [], credentials: {{keys: []}}}}"
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("has no token_sources"), "{err}");
+
+        let err = parse(&format!(
+            "{base}  - {{id: x, token_sources: [http.host], credentials: {{keys: []}}}}"
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("has no keys"), "{err}");
     }
 
     #[test]

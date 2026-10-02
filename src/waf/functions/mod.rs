@@ -4,13 +4,18 @@ mod encode;
 mod generic;
 pub mod helpers;
 mod json;
+mod jwt;
 mod regex;
 mod string;
 
+use std::sync::Arc;
+
 use helpers::{BytesPredicateFunction, BytesTransformFunction};
+pub use jwt::{PRESENT_FIELD, RuleCompiler, VALID_FIELD};
 use wirefilter_engine::ConcatFunction;
 
-pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
+/// `token_ids` are the token configuration IDs the JWT functions accept.
+pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[String]) {
     b.add_function("concat", ConcatFunction::new()).unwrap();
 
     // String transform functions (polymorphic: Bytes|Array<Bytes> ->
@@ -135,6 +140,13 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
     // JSON
     b.add_function("lookup_json_string", json::LookupJsonStringFunction)
         .unwrap();
+
+    // JWT
+    let token_ids: Arc<[String]> = token_ids.into();
+    for name in [jwt::IS_JWT_VALID, jwt::IS_JWT_PRESENT] {
+        b.add_function(name, jwt::JwtFunction::new(token_ids.clone()))
+            .unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -143,7 +155,7 @@ pub(crate) mod test_support {
 
     /// Build the production scheme (all fields + functions registered).
     pub fn scheme() -> Scheme {
-        crate::waf::scheme::build(&[])
+        crate::waf::scheme::build(&[], &[])
     }
 
     /// Parse and evaluate a boolean `expr` after setting a single `Bytes`

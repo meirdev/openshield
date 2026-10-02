@@ -10,6 +10,7 @@ OpenShield is a reverse proxy and Web Application Firewall (WAF) built on [Cloud
 - SQL injection and XSS detection with libinjection
 - GeoIP lookups, IP and string lists, and threat scores
 - Per-key rate limits and Turnstile challenges
+- JWT validation with claims available to rules
 - JSON or text logs and Prometheus metrics
 
 ## Quick start
@@ -48,4 +49,5 @@ Send requests to `http://127.0.0.1:8080`. This rule returns `403` when it detect
 - [Configuration](docs/configuration.md): settings, defaults, and optional services
 - [Rules](docs/rules.md): rulesets, phases, actions, rate limits, functions, and fields
 - [Turnstile challenges](docs/challenges.md): verification flow and custom pages
+- [JWT validation](docs/jwt.md): token configurations, keys, and claim fields
 - [Operations](docs/operations.md): reloads, logging, and metrics

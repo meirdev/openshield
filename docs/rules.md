@@ -279,9 +279,18 @@ Use string literals for object keys and integer literals for array indexes. The 
 lookup_json_string(http.request.body.raw, "users", 0, "name") == "alice"
 ```
 
+### JWT
+
+| Function               | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `is_jwt_valid("id")`   | True if the request has a valid token                 |
+| `is_jwt_present("id")` | True if the request has a token, whether valid or not |
+
+The argument is the `id` of a token configuration. See [JWT validation](jwt.md).
+
 ## Fields
 
-Fields become available as the request moves through the phases. GeoIP fields require configured databases; body fields require body inspection. A field may be absent when the corresponding data is unavailable.
+Fields become available as the request moves through the phases. GeoIP fields require configured databases; body fields require body inspection; JWT claim fields require a token configuration. A field may be absent when the corresponding data is unavailable.
 
 ### IP and GeoIP
 
@@ -294,6 +303,12 @@ Fields become available as the request moves through the phases. GeoIP fields re
 ### Headers, cookies, and query arguments
 
 `http.request.headers`, `http.request.headers.names`, `http.request.headers.values`, `http.request.cookies`, `http.request.cookies.names`, `http.request.cookies.values`, `http.request.uri.args`, `http.request.uri.args.names`, `http.request.uri.args.values`, `http.request.accepted_languages`
+
+### JWT claims
+
+`http.request.jwt.claims.aud`, `http.request.jwt.claims.iss`, `http.request.jwt.claims.jti`, `http.request.jwt.claims.sub`, `http.request.jwt.claims.iat.sec`, `http.request.jwt.claims.nbf.sec`
+
+Each is a map keyed by token configuration `id` and also has `.names` and `.values` arrays. See [JWT validation](jwt.md#claims).
 
 ### Request body
 
