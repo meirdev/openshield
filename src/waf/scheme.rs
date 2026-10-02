@@ -1,4 +1,4 @@
-use wirefilter_engine::{Scheme, SchemeBuilder, Type};
+use wirefilter_engine::{ExecutionContext, Scheme, SchemeBuilder, Type};
 
 use super::functions;
 use super::lists::{BytesListDefinition, IpListDefinition};
@@ -30,8 +30,17 @@ macro_rules! opt {
     };
 }
 
+/// Wirefilter has no boolean literals, so `true` and `false` are registered
+/// as fields that [`new_context`] sets on every execution context.
+pub const CONSTANTS: [(&str, bool); 2] = [("true", true), ("false", false)];
+
 pub fn build(score_names: &[String]) -> Scheme {
     let mut b = SchemeBuilder::new();
+
+    // constants
+    for (name, _) in CONSTANTS {
+        b.add_field(name, Type::Bool).unwrap();
+    }
 
     // fields
     opt!(b, "ip.src", Ip);
@@ -126,9 +135,37 @@ pub fn build(score_names: &[String]) -> Scheme {
     b.build()
 }
 
+pub fn new_context(scheme: &Scheme) -> ExecutionContext<'static> {
+    let mut ctx = ExecutionContext::new(scheme);
+    for (name, value) in CONSTANTS {
+        let field = scheme.get_field(name).unwrap();
+        ctx.set_field_value(field, value).unwrap();
+    }
+    ctx
+}
+
 #[cfg(test)]
 mod tests {
-    use super::build;
+    use super::{build, new_context};
+
+    fn eval(expr: &str) -> bool {
+        let scheme = build(&[]);
+        let filter = scheme.parse(expr).expect("should parse").compile();
+        filter
+            .execute(&new_context(&scheme))
+            .expect("should execute")
+    }
+
+    #[test]
+    fn boolean_constants_evaluate() {
+        assert!(eval("true"));
+        assert!(!eval("false"));
+        assert!(eval("not false"));
+        assert!(eval("(true) and (not false)"));
+        // `http.host` is unset, so only the constant can make this match.
+        assert!(eval(r#"true or http.host == "x""#));
+        assert!(!eval(r#"false or http.host == "x""#));
+    }
 
     #[test]
     fn unknown_field_is_rejected() {

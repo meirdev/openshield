@@ -251,7 +251,7 @@ mod tests {
     use std::collections::HashMap;
 
     use serde_json::{Map, Value};
-    use wirefilter_engine::{ExecutionContext, LhsValue, Scheme};
+    use wirefilter_engine::{LhsValue, Scheme};
 
     use super::{Action, CompiledRule, Engine, Phase, RuleAction};
     use crate::config::RateLimitConfig;
@@ -301,7 +301,7 @@ mod tests {
         phase: Phase,
         fields: &[(&str, &[u8])],
     ) -> Outcome {
-        let mut ctx = ExecutionContext::new(scheme);
+        let mut ctx = crate::waf::scheme::new_context(scheme);
         for (name, val) in fields {
             let f = scheme.get_field(name).expect("field should exist");
             ctx.set_field_value(f, LhsValue::Bytes(val.to_vec().into()))

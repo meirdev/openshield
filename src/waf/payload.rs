@@ -1,6 +1,8 @@
 use serde_json::{Map, Value};
 use wirefilter_engine::{ExecutionContext, Field, FilterAst, Scheme, Visitor};
 
+use super::scheme::CONSTANTS;
+
 struct FieldCollector {
     fields: Vec<String>,
 }
@@ -8,6 +10,9 @@ struct FieldCollector {
 impl<'a> Visitor<'a> for FieldCollector {
     fn visit_field(&mut self, f: &'a Field) {
         let name = f.name();
+        if CONSTANTS.iter().any(|(c, _)| *c == name) {
+            return;
+        }
         if !self.fields.iter().any(|x| x == name) {
             self.fields.push(name.to_string());
         }

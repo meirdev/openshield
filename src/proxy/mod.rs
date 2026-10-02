@@ -405,7 +405,7 @@ impl ProxyHttp for ReverseProxyHandler {
             start: Instant::now(),
             geo: None,
             exec_ctx: {
-                let mut ctx = wirefilter_engine::ExecutionContext::new(&self.scheme);
+                let mut ctx = crate::waf::scheme::new_context(&self.scheme);
                 if let Some(list_ref) = self.scheme.get_list(&wirefilter_engine::Type::Ip) {
                     let matcher = ctx.get_list_matcher_mut(list_ref);
                     let ip_matcher = matcher
