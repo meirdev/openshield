@@ -98,6 +98,8 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
         BytesTransformFunction::new("hex_encode", encode::hex_encode),
     )
     .unwrap();
+    b.add_function("md5", BytesTransformFunction::new("md5", encode::md5))
+        .unwrap();
     b.add_function("sha1", BytesTransformFunction::new("sha1", encode::sha1))
         .unwrap();
     b.add_function(

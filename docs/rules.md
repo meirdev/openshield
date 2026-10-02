@@ -235,7 +235,7 @@ Transforms and detection functions accept a string or an array of strings. Use `
 | `base64_decode`, `base64_encode`                 | Base64 decoding and encoding                  |
 | `hex_decode`, `hex_encode`                       | Hex decoding and encoding                     |
 | `html_entity_decode`                             | Decode HTML entities                          |
-| `sha1`                                           | SHA-1 hash as a hex string                    |
+| `md5`, `sha1`                                    | MD5 or SHA-1 hash as a hex string             |
 | `utf8_to_unicode`                                | UTF-8 to `\uXXXX` escapes                     |
 | `remove_nulls`, `replace_nulls`                  | Remove null bytes or replace them with spaces |
 | `remove_whitespace`                              | Strip all ASCII whitespace                    |
