@@ -42,3 +42,4 @@ reqwest = { version = "0.13.2", default-features = false, features = ["rustls", 
 hex = "0.4.3"
 hmac = "0.13.0"
 libc = "0.2.184"
+md-5 = "0.11"

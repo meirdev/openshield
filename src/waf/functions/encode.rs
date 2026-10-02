@@ -1,4 +1,5 @@
 use base64::Engine as _;
+use md5::Md5;
 use sha1::{Digest, Sha1};
 
 pub fn base64_encode(input: &[u8]) -> Vec<u8> {
@@ -9,6 +10,10 @@ pub fn base64_encode(input: &[u8]) -> Vec<u8> {
 
 pub fn hex_encode(input: &[u8]) -> Vec<u8> {
     hex::encode(input).into_bytes()
+}
+
+pub fn md5(input: &[u8]) -> Vec<u8> {
+    hex::encode(Md5::digest(input)).into_bytes()
 }
 
 pub fn sha1(input: &[u8]) -> Vec<u8> {
@@ -63,6 +68,13 @@ mod tests {
         let data = b"\x00\x01\x02\xfe\xff";
         let encoded = hex_encode(data);
         assert_eq!(decode::hex_decode(&encoded), data);
+    }
+
+    #[test]
+    fn md5_known_vector() {
+        // RFC 1321 test vectors.
+        assert_eq!(md5(b"abc"), b"900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(md5(b""), b"d41d8cd98f00b204e9800998ecf8427e");
     }
 
     #[test]

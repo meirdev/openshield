@@ -58,6 +58,37 @@ pub fn remove_whitespace(input: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+/// Unlike `u8::is_ascii_whitespace`, this includes vertical tab (0x0B).
+const fn is_space(c: u8) -> bool {
+    matches!(c, b' ' | b'\t'..=b'\r')
+}
+
+pub fn compress_whitespace(input: &[u8]) -> Vec<u8> {
+    let mut out: Vec<u8> = input
+        .iter()
+        .map(|&c| if is_space(c) { b' ' } else { c })
+        .collect();
+    out.dedup_by(|a, b| *a == b' ' && *b == b' ');
+    out
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+pub fn replace_comments(input: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(start) = find(rest, b"/*") {
+        out.extend_from_slice(&rest[..start]);
+        out.push(b' ');
+        let body = &rest[start + 2..];
+        rest = find(body, b"*/").map_or(&[][..], |end| &body[end + 2..]);
+    }
+    out.extend_from_slice(rest);
+    out
+}
+
 pub fn starts_with_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
     let LhsValue::Bytes(input) = args.next()?.ok()? else {
         return None;
@@ -118,6 +149,46 @@ mod tests {
     fn remove_whitespace_strips_interior_too() {
         assert_eq!(remove_whitespace(b" a b\tc\n"), b"abc");
         assert_eq!(remove_whitespace(b"nospace"), b"nospace");
+    }
+
+    #[test]
+    fn compress_whitespace_collapses_runs() {
+        assert_eq!(compress_whitespace(b"a  b \t\r\n c"), b"a b c");
+        assert_eq!(compress_whitespace(b"  a  "), b" a ");
+        // A lone whitespace byte is still normalized to a space.
+        assert_eq!(compress_whitespace(b"a\tb\nc"), b"a b c");
+        assert_eq!(compress_whitespace(b"nospace"), b"nospace");
+        assert_eq!(compress_whitespace(b""), b"");
+    }
+
+    #[test]
+    fn replace_comments_replaces_each_with_one_space() {
+        assert_eq!(replace_comments(b"UN/**/ION/* x */SELECT"), b"UN ION SELECT");
+        assert_eq!(replace_comments(b"a/* 1 *//* 2 */b"), b"a  b");
+        assert_eq!(replace_comments(b"a/* line\nbreak */b"), b"a b");
+        assert_eq!(replace_comments(b"no comments"), b"no comments");
+        assert_eq!(replace_comments(b""), b"");
+    }
+
+    #[test]
+    fn replace_comments_edge_cases() {
+        // Unterminated comment swallows the rest of the input.
+        assert_eq!(replace_comments(b"a/* b"), b"a ");
+        // `/*/` opens a comment but does not close it.
+        assert_eq!(replace_comments(b"a/*/b"), b"a ");
+        // A standalone `*/` is left alone.
+        assert_eq!(replace_comments(b"a*/b"), b"a*/b");
+        // Comments do not nest: the first `*/` closes.
+        assert_eq!(replace_comments(b"a/* /* */b*/"), b"a b*/");
+    }
+
+    #[test]
+    fn compress_whitespace_uses_c_isspace() {
+        // Vertical tab and form feed are whitespace for C `isspace`.
+        assert_eq!(compress_whitespace(b"a\x0b\x0cb"), b"a b");
+        // NUL and NBSP (0xA0) are not.
+        assert_eq!(compress_whitespace(b"a\0\0b"), b"a\0\0b");
+        assert_eq!(compress_whitespace(b"a\xa0\xa0b"), b"a\xa0\xa0b");
     }
 
     // Expression-level tests: confirm the functions are registered and wired

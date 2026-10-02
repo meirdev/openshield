@@ -46,6 +46,16 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
         BytesTransformFunction::new("remove_whitespace", string::remove_whitespace),
     )
     .unwrap();
+    b.add_function(
+        "compress_whitespace",
+        BytesTransformFunction::new("compress_whitespace", string::compress_whitespace),
+    )
+    .unwrap();
+    b.add_function(
+        "replace_comments",
+        BytesTransformFunction::new("replace_comments", string::replace_comments),
+    )
+    .unwrap();
 
     // String functions (non-polymorphic)
     b.add_function("len", generic::LenFunction).unwrap();
@@ -93,6 +103,8 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder) {
         BytesTransformFunction::new("hex_encode", encode::hex_encode),
     )
     .unwrap();
+    b.add_function("md5", BytesTransformFunction::new("md5", encode::md5))
+        .unwrap();
     b.add_function("sha1", BytesTransformFunction::new("sha1", encode::sha1))
         .unwrap();
     b.add_function(
