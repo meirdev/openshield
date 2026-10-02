@@ -3,8 +3,8 @@ use std::fmt;
 use regex::bytes::Regex;
 use wirefilter_engine::{
     Array, Bytes as WfBytes, BytesExpr, ExpectedType, FunctionArgs, FunctionDefinition,
-    FunctionDefinitionContext, FunctionParam, FunctionParamError, GetType, LhsValue,
-    ParserSettings, RhsValue, Type, TypedArray,
+    FunctionDefinitionContext, FunctionParam, FunctionParamError, GetType, LhsValue, LiteralValue,
+    ParserSettings, Type, TypedArray,
 };
 
 fn compile_regex(pattern: &[u8]) -> Result<Regex, String> {
@@ -15,7 +15,7 @@ fn compile_regex(pattern: &[u8]) -> Result<Regex, String> {
 
 fn take_bytes_literal(param: FunctionParam<'_>) -> Vec<u8> {
     match param {
-        FunctionParam::Constant(RhsValue::Bytes(b)) => b[..].to_vec(),
+        FunctionParam::Constant(LiteralValue::Bytes(b)) => b[..].to_vec(),
         _ => unreachable!("validated in check_param"),
     }
 }

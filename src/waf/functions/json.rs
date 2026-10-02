@@ -3,7 +3,7 @@ use std::fmt;
 use serde_json::Value;
 use wirefilter_engine::{
     BytesExpr, ExpectedType, FunctionArgs, FunctionDefinition, FunctionDefinitionContext,
-    FunctionParam, FunctionParamError, LhsValue, ParserSettings, RhsValue, Type,
+    FunctionParam, FunctionParamError, LhsValue, LiteralValue, ParserSettings, Type,
 };
 
 #[derive(Clone)]
@@ -33,8 +33,8 @@ impl FunctionDefinition for LookupJsonStringFunction {
             0 => next_param.expect_val_type([ExpectedType::Type(Type::Bytes)].into_iter()),
             // Subsequent params: literal keys (Bytes for object keys, Int for array indices)
             _ => match next_param {
-                FunctionParam::Constant(RhsValue::Bytes(_))
-                | FunctionParam::Constant(RhsValue::Int(_)) => Ok(()),
+                FunctionParam::Constant(LiteralValue::Bytes(_))
+                | FunctionParam::Constant(LiteralValue::Int(_)) => Ok(()),
                 // Fall through to produce a meaningful error
                 _ => next_param.expect_const_value::<&BytesExpr, _>(|_| Ok(())),
             },
@@ -62,10 +62,10 @@ impl FunctionDefinition for LookupJsonStringFunction {
         let _source = params.next().unwrap();
         let keys: Vec<JsonKey> = params
             .map(|p| match p {
-                FunctionParam::Constant(RhsValue::Bytes(b)) => {
+                FunctionParam::Constant(LiteralValue::Bytes(b)) => {
                     JsonKey::String(String::from_utf8_lossy(&b).into_owned())
                 }
-                FunctionParam::Constant(RhsValue::Int(i)) => JsonKey::Index(*i),
+                FunctionParam::Constant(LiteralValue::Int(i)) => JsonKey::Index(*i),
                 _ => unreachable!("validated in check_param"),
             })
             .collect();

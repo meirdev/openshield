@@ -9,7 +9,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 erased-serde = "0.4"
 clap = { version = "4", features = ["derive"] }
-pingora = { version = "0.8.1", features = ["proxy", "rustls"] }
+pingora = { version = "0.9.0", features = ["proxy", "rustls"] }
 async-trait = "0.1"
 bytes = "1"
 maxminddb = "0.27"
@@ -23,7 +23,7 @@ serde_yaml = "0.9"
 log = "0.4"
 env_logger = "0.11"
 signal-hook = "0.3"
-prometheus = "0.13"
+prometheus = "0.14"
 lazy_static = "1"
 http = "1"
 ip_network_table = "0.2"
@@ -33,7 +33,8 @@ libinjectionrs = "0.1"
 chrono = "0.4"
 base64 = "0.22"
 mimalloc = "0.1"
-pingora-limits = "0.8.1"
+pingora-limits = "0.9.0"
+pingora-prometheus = "0.9.0"
 uuid = { version = "1.23.0", features = ["v4"] }
 sha1 = "0.11.0"
 html-escape = "0.2.13"
