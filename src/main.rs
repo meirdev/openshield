@@ -83,7 +83,7 @@ fn main() {
     });
 
     // WAF scheme + engine
-    let scheme = Arc::new(waf::scheme::build(&config.scores));
+    let scheme = Arc::new(waf::scheme::build(&config.scores, &config.token_ids()));
     info!("WAF scheme: {} fields", scheme.field_count());
 
     let engine = match compiler::compile(&config, &scheme, None) {
@@ -93,6 +93,23 @@ fn main() {
         }
         Err(e) => {
             error!("Failed to compile rules: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // JWT validation
+    let jwt = match waf::jwt::JwtValidator::new(&config.token_configurations, &scheme) {
+        Ok(v) => {
+            if !v.is_empty() {
+                info!(
+                    "Token configurations: {}",
+                    config.token_configurations.len()
+                );
+            }
+            v
+        }
+        Err(e) => {
+            error!("Failed to load token configurations: {}", e);
             std::process::exit(1);
         }
     };
@@ -162,6 +179,7 @@ fn main() {
         geoip,
         scheme: scheme.clone(),
         engine,
+        jwt,
         max_request_body_buffer: config.max_request_body_buffer,
         request_body_limit_action: config.request_body_limit_action,
         inspect_response_body: config.inspect_response_body,

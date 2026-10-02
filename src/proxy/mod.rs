@@ -21,6 +21,7 @@ use crate::logging::{
 };
 use crate::waf::data::{MultipartPartData, RequestData, ResponseData};
 use crate::waf::engine::{Engine, Phase, RuleAction};
+use crate::waf::jwt::JwtValidator;
 use crate::waf::lists::{BytesListMatcher, IpListMatcher};
 use crate::waf::populate;
 
@@ -32,6 +33,7 @@ pub struct ReverseProxyHandler {
     pub geoip: Option<GeoIp>,
     pub scheme: Arc<wirefilter_engine::Scheme>,
     pub engine: Engine,
+    pub jwt: JwtValidator,
     pub max_request_body_buffer: usize,
     pub request_body_limit_action: BodyLimitAction,
     pub inspect_response_body: bool,
@@ -458,6 +460,10 @@ impl ProxyHttp for ReverseProxyHandler {
         }
         let req_data = extract_request_data(session, &ctx.geo);
         populate::request_fields(&mut ctx.exec_ctx, &self.scheme, &req_data);
+        if !self.jwt.is_empty() {
+            let outcomes = self.jwt.evaluate(&ctx.exec_ctx);
+            populate::jwt_fields(&mut ctx.exec_ctx, &self.scheme, &outcomes);
+        }
 
         if let Some(ct) = session
             .req_header()

@@ -1,3 +1,4 @@
+mod jwt;
 mod request_body;
 mod request_headers;
 mod response_body;
@@ -5,6 +6,7 @@ mod response_headers;
 
 use std::collections::HashMap;
 
+pub use jwt::jwt_fields;
 pub use request_body::{body_fields, multipart_fields};
 pub use request_headers::request_fields;
 pub use response_body::response_body_fields;
@@ -111,7 +113,7 @@ pub(crate) mod test_support {
     use crate::waf::data::RequestData;
 
     pub fn scheme() -> Scheme {
-        crate::waf::scheme::build(&[])
+        crate::waf::scheme::build(&[], &[])
     }
 
     /// A fresh context for populating fields. The scheme is cloned internally,

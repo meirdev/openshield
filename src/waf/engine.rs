@@ -261,7 +261,7 @@ mod tests {
     const MATCH: &str = r#"http.host == "evil.com""#;
 
     fn scheme() -> Scheme {
-        crate::waf::scheme::build(&["sqli".to_string()])
+        crate::waf::scheme::build(&["sqli".to_string()], &[])
     }
 
     fn compile_rule(

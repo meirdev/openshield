@@ -20,6 +20,10 @@ macro_rules! opt {
         $b.add_optional_field($name, Type::Array(Type::Bytes.into()))
             .unwrap()
     };
+    ($b:expr, $name:expr, Arr<Int>) => {
+        $b.add_optional_field($name, Type::Array(Type::Int.into()))
+            .unwrap()
+    };
     ($b:expr, $name:expr, Arr<Arr<Str>>) => {
         $b.add_optional_field($name, Type::Array(Type::Array(Type::Bytes.into()).into()))
             .unwrap()
@@ -28,13 +32,24 @@ macro_rules! opt {
         $b.add_optional_field($name, Type::Map(Type::Array(Type::Bytes.into()).into()))
             .unwrap()
     };
+    ($b:expr, $name:expr, Map<Arr<Int>>) => {
+        $b.add_optional_field($name, Type::Map(Type::Array(Type::Int.into()).into()))
+            .unwrap()
+    };
 }
 
 /// Wirefilter has no boolean literals, so `true` and `false` are registered
 /// as fields that [`new_context`] sets on every execution context.
 pub const CONSTANTS: [(&str, bool); 2] = [("true", true), ("false", false)];
 
-pub fn build(score_names: &[String]) -> Scheme {
+/// JWT claims exposed as `http.request.jwt.claims.{name}`, keyed by token
+/// configuration ID.
+pub const JWT_STRING_CLAIMS: [&str; 4] = ["aud", "iss", "jti", "sub"];
+/// JWT timestamp claims exposed as `http.request.jwt.claims.{name}.sec`.
+pub const JWT_TIME_CLAIMS: [&str; 2] = ["iat", "nbf"];
+
+/// `token_ids` are the configured token configuration IDs.
+pub fn build(score_names: &[String], token_ids: &[String]) -> Scheme {
     let mut b = SchemeBuilder::new();
 
     // constants
@@ -82,6 +97,21 @@ pub fn build(score_names: &[String]) -> Scheme {
     opt!(b, "http.request.uri.args.values", Arr<Str>);
     opt!(b, "http.request.accepted_languages", Arr<Str>);
 
+    opt!(b, functions::VALID_FIELD, Arr<Str>);
+    opt!(b, functions::PRESENT_FIELD, Arr<Str>);
+    for claim in JWT_STRING_CLAIMS {
+        let name = format!("http.request.jwt.claims.{claim}");
+        opt!(b, &name, Map<Arr<Str>>);
+        opt!(b, &format!("{name}.names"), Arr<Str>);
+        opt!(b, &format!("{name}.values"), Arr<Str>);
+    }
+    for claim in JWT_TIME_CLAIMS {
+        let name = format!("http.request.jwt.claims.{claim}.sec");
+        opt!(b, &name, Map<Arr<Int>>);
+        opt!(b, &format!("{name}.names"), Arr<Str>);
+        opt!(b, &format!("{name}.values"), Arr<Int>);
+    }
+
     opt!(b, "http.request.body.raw", Str);
     opt!(b, "http.request.body.size", Int);
     opt!(b, "http.request.body.truncated", Bool);
@@ -126,7 +156,7 @@ pub fn build(score_names: &[String]) -> Scheme {
     }
 
     // functions
-    functions::register_all(&mut b);
+    functions::register_all(&mut b, token_ids);
 
     // lists
     b.add_list(Type::Ip, IpListDefinition).unwrap();
@@ -149,7 +179,7 @@ mod tests {
     use super::{build, new_context};
 
     fn eval(expr: &str) -> bool {
-        let scheme = build(&[]);
+        let scheme = build(&[], &[]);
         let filter = scheme.parse(expr).expect("should parse").compile();
         filter
             .execute(&new_context(&scheme))
@@ -169,13 +199,13 @@ mod tests {
 
     #[test]
     fn unknown_field_is_rejected() {
-        let scheme = build(&[]);
+        let scheme = build(&[], &[]);
         assert!(scheme.get_field("does.not.exist").is_err());
     }
 
     #[test]
     fn score_fields_use_score_prefix() {
-        let scheme = build(&["sqli".to_string(), "xss".to_string()]);
+        let scheme = build(&["sqli".to_string(), "xss".to_string()], &[]);
         assert!(scheme.get_field("score.sqli").is_ok());
         assert!(scheme.get_field("score.xss").is_ok());
         // Scores not declared in config are not registered.
@@ -184,7 +214,7 @@ mod tests {
 
     #[test]
     fn no_score_fields_without_config() {
-        let scheme = build(&[]);
+        let scheme = build(&[], &[]);
         assert!(scheme.get_field("score.sqli").is_err());
     }
 }

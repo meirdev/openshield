@@ -91,3 +91,5 @@ See [operations](operations.md) for log contents, application log levels, and me
 Define WAF behavior with `rulesets`, named IP or string collections with `lists`, and per-request counters with `scores`. See [rules](rules.md) for examples and the expression reference.
 
 Rules with `action: challenge` also require a `challenge` block. See [Turnstile challenges](challenges.md) for setup.
+
+To verify JSON Web Tokens and use their claims in rules, add `token_configurations`. See [JWT validation](jwt.md) for setup.
