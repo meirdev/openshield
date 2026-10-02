@@ -173,17 +173,6 @@ pub struct RuleConfig {
     pub logging: RuleLoggingConfig,
 }
 
-impl RuleConfig {
-    /// The `execute` guard to AND onto each ruleset rule, or `None` when the
-    /// expression is the literal `true`. Wirefilter has a Bool *type* but no
-    /// boolean *literal* (`true` parses as an unknown identifier), so `true`
-    /// is handled here rather than parsed.
-    pub fn execute_guard(&self) -> Option<&str> {
-        let expr = self.expression.trim();
-        (expr != "true").then_some(expr)
-    }
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct RuleLoggingConfig {
@@ -687,7 +676,7 @@ rulesets:
     }
 
     #[test]
-    fn execute_requires_expression_and_true_means_no_guard() {
+    fn execute_requires_expression() {
         let err = parse(&with_root(
             "- id: run\n  action: execute\n  action_parameters:\n    id: crs",
         ))
@@ -695,24 +684,6 @@ rulesets:
         assert!(
             err.to_string().contains("missing field `expression`"),
             "{err}"
-        );
-
-        let cfg = parse(&with_execute("")).unwrap();
-        assert_eq!(cfg.rulesets[1].rules[0].execute_guard(), None);
-
-        let cfg = parse(&with_root(
-            r#"
-- id: run
-  action: execute
-  expression: 'http.host == "x"'
-  action_parameters:
-    id: crs
-"#,
-        ))
-        .unwrap();
-        assert_eq!(
-            cfg.rulesets[1].rules[0].execute_guard(),
-            Some(r#"http.host == "x""#)
         );
     }
 

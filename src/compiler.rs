@@ -44,7 +44,7 @@ pub fn compile(
                     .find(|r| r.name == id)
                     .ok_or_else(|| format!("rule '{}': unknown ruleset '{}'", rule_cfg.id, id))?;
                 let overrides = params.and_then(|p| p.overrides.clone()).unwrap_or_default();
-                let guard = rule_cfg.execute_guard();
+                let guard = Some(rule_cfg.expression.as_str());
 
                 debug!("Expanding ruleset '{}' via rule '{}'", id, rule_cfg.id);
                 executed.insert(id);
@@ -329,6 +329,44 @@ rulesets:
                 r.id,
                 r.log_fields
             );
+        }
+    }
+
+    #[test]
+    fn execute_with_true_runs_ruleset_unconditionally() {
+        let cfg: config::Config = serde_yaml::from_str(&format!(
+            r#"{BASE}
+  - name: main
+    kind: root
+    rules:
+      - id: run
+        action: execute
+        expression: "true"
+        action_parameters:
+          id: crs
+"#
+        ))
+        .unwrap();
+        let scheme = crate::waf::scheme::build(&cfg.scores);
+        let engine = compile(&cfg, &scheme, None).unwrap();
+
+        // The constant is not a payload field.
+        let rules = engine.rules_in(&Phase::RequestHeaders);
+        assert_eq!(rules[0].log_fields, vec!["http.request.uri.path"]);
+
+        let mut ctx = crate::waf::scheme::new_context(&scheme);
+        let path = scheme.get_field("http.request.uri.path").unwrap();
+        ctx.set_field_value(path, "/a1").unwrap();
+        let action = engine.evaluate(
+            &Phase::RequestHeaders,
+            &ctx,
+            &mut Default::default(),
+            &mut Vec::new(),
+            &mut Default::default(),
+        );
+        match action {
+            crate::waf::engine::RuleAction::Block { rule_id, .. } => assert_eq!(rule_id, "1"),
+            _ => panic!("expected Block by rule '1'"),
         }
     }
 

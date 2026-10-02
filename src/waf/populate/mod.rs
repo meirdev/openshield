@@ -117,7 +117,7 @@ pub(crate) mod test_support {
     /// A fresh context for populating fields. The scheme is cloned internally,
     /// so the returned context is self-contained (`'static` values).
     pub fn context(scheme: &Scheme) -> ExecutionContext<'static> {
-        ExecutionContext::new(scheme)
+        crate::waf::scheme::new_context(scheme)
     }
 
     /// A `RequestData` with everything empty/defaulted — tests set only the
