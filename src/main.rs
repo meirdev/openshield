@@ -15,11 +15,9 @@ use std::sync::Arc;
 use clap::Parser;
 use config::Config;
 use log::{error, info};
-use pingora::apps::prometheus_http_app::PrometheusServer;
 use pingora::prelude::*;
 use pingora::proxy::http_proxy_service;
 use pingora::server::configuration::Opt as PingoraOpt;
-use pingora::services::listening::Service as ListeningService;
 
 #[derive(Parser)]
 #[command(name = "openshield", version, about = "OpenShield proxy")]
@@ -196,7 +194,7 @@ fn main() {
 
     if let Some(ref metrics_cfg) = config.metrics {
         if metrics_cfg.enabled {
-            let mut prom_service = ListeningService::<PrometheusServer>::prometheus_http_service();
+            let mut prom_service = pingora_prometheus::prometheus_http_service();
             prom_service.add_tcp(&metrics_cfg.listen);
             server.add_service(prom_service);
             info!("Prometheus metrics at {}", metrics_cfg.listen);
