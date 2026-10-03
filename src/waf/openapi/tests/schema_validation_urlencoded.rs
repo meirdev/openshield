@@ -5,7 +5,7 @@
 use serde_json::json;
 
 use super::common::*;
-use crate::waf::openapi::error::ValidationErrorKind;
+use crate::waf::openapi::error::ErrorClass;
 
 const FORM: &str = "application/x-www-form-urlencoded";
 
@@ -23,7 +23,7 @@ macro_rules! complex_case {
             if $valid {
                 assert_valid(result);
             } else {
-                assert_schema_invalid(result);
+                assert_rejected(result);
             }
         }
     };
@@ -118,7 +118,7 @@ fn malformed_url_encoding() {
     );
     assert_invalid(
         validate_raw(&spec, FORM, "bad_encoding=%zz"),
-        ValidationErrorKind::InvalidBody,
+        ErrorClass::InvalidEncoding,
     );
 }
 
@@ -136,6 +136,6 @@ fn invalid_json_content_type_field() {
     );
     assert_invalid(
         validate_raw(&spec, FORM, "badJson={invalid"),
-        ValidationErrorKind::InvalidBody,
+        ErrorClass::InvalidSyntax,
     );
 }

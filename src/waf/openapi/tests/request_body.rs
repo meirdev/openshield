@@ -8,9 +8,10 @@ use std::sync::OnceLock;
 use serde_json::{Value, json};
 
 use super::common::{
-    assert_error_paths, assert_schema_invalid, assert_valid, compile, compile_media, validate,
+    assert_error_paths, assert_schema_invalid, assert_valid, compile, compile_media,
+    is_schema_class, validate,
 };
-use crate::waf::openapi::error::{ValidationErrorKind as Kind, ValidationResult};
+use crate::waf::openapi::error::{ErrorClass, Location, ValidationResult, Violation};
 use crate::waf::openapi::{CompiledSpec, Request, validate_request};
 
 const BURGER_PATH: &str = "/burgers/createBurger";
@@ -74,6 +75,44 @@ fn run(spec: &CompiledSpec, request: &RequestData) -> ValidationResult {
     )
 }
 
+/// The coarse outcome a case expects, in the upstream test suite's terms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Kind {
+    SchemaValidation,
+    InvalidBody,
+    MissingRequiredBody,
+    UnsupportedContentType,
+    PathNotFound,
+    MethodNotAllowed,
+}
+
+impl Kind {
+    fn http_status(self) -> u16 {
+        match self {
+            Self::PathNotFound => 404,
+            Self::MethodNotAllowed => 405,
+            Self::UnsupportedContentType => 415,
+            _ => 400,
+        }
+    }
+
+    fn of(v: &Violation) -> Self {
+        match (v.location, v.class) {
+            (Location::Header, ErrorClass::InvalidMediaType | ErrorClass::UnsupportedMediaType) => {
+                Self::UnsupportedContentType
+            }
+            (Location::Body, ErrorClass::InvalidSyntax | ErrorClass::InvalidEncoding) => {
+                Self::InvalidBody
+            }
+            (Location::Body, ErrorClass::MissingRequired) if v.target.is_empty() => {
+                Self::MissingRequiredBody
+            }
+            (Location::Body, class) if is_schema_class(class) => Self::SchemaValidation,
+            _ => panic!("unexpected violation {v:#?}"),
+        }
+    }
+}
+
 #[track_caller]
 fn assert_errors(result: ValidationResult, expected: &[(Kind, &str)]) {
     assert_eq!(
@@ -81,24 +120,29 @@ fn assert_errors(result: ValidationResult, expected: &[(Kind, &str)]) {
         expected.first().map(|(kind, _)| kind.http_status()),
         "{result:#?}"
     );
-    let ValidationResult::Invalid(errors) = result else {
-        panic!("expected rejection")
+    let violations = match result {
+        ValidationResult::Unmatched(_) => {
+            assert!(
+                matches!(expected, [(Kind::PathNotFound | Kind::MethodNotAllowed, _)]),
+                "unexpected unmatched operation; expected {expected:?}"
+            );
+            return;
+        }
+        ValidationResult::Invalid(violations) => violations,
+        ValidationResult::Valid => panic!("expected rejection"),
     };
     // Order of independent schema errors is not part of the public contract.
-    let mut actual: Vec<_> = errors
+    let mut actual: Vec<_> = violations
         .iter()
-        .map(|error| {
-            assert!(!error.message.is_empty());
-            (format!("{:?}", error.kind), error.path.as_str())
+        .map(|v| {
+            assert!(!v.message.is_empty());
+            (Kind::of(v), v.target.as_str())
         })
         .collect();
-    let mut expected: Vec<_> = expected
-        .iter()
-        .map(|(kind, path)| (format!("{kind:?}"), *path))
-        .collect();
+    let mut expected = expected.to_vec();
     actual.sort();
     expected.sort();
-    assert_eq!(actual, expected, "{errors:#?}");
+    assert_eq!(actual, expected, "{violations:#?}");
 }
 
 macro_rules! body_case {
@@ -159,7 +203,7 @@ body_case!(
     BURGER_PATH,
     Some("application/json"),
     None,
-    &[(Kind::MissingRequiredBody, "body")]
+    &[(Kind::MissingRequiredBody, "")]
 );
 body_case!(
     explicit_empty_required_body,
@@ -168,7 +212,7 @@ body_case!(
     BURGER_PATH,
     Some("application/json"),
     Some(""),
-    &[(Kind::MissingRequiredBody, "body")]
+    &[(Kind::MissingRequiredBody, "")]
 );
 body_case!(
     schema_has_no_request_body,
@@ -223,8 +267,8 @@ body_case!(
     Some("foo/json"),
     Some(BAD),
     &[
-        (Kind::SchemaValidation, "body/patties"),
-        (Kind::SchemaValidation, "body/vegetarian")
+        (Kind::SchemaValidation, "/patties"),
+        (Kind::SchemaValidation, "/vegetarian")
     ]
 );
 body_case!(
@@ -234,7 +278,7 @@ body_case!(
     BURGER_PATH,
     Some("thomas/tank-engine"),
     Some(GOOD),
-    &[(Kind::UnsupportedContentType, "header.Content-Type")]
+    &[(Kind::UnsupportedContentType, "content-type")]
 );
 body_case!(
     content_type_not_set,
@@ -243,7 +287,7 @@ body_case!(
     BURGER_PATH,
     None,
     Some(GOOD),
-    &[(Kind::UnsupportedContentType, "header.Content-Type")]
+    &[(Kind::UnsupportedContentType, "content-type")]
 );
 body_case!(
     path_not_found,
@@ -280,8 +324,8 @@ body_case!(
     Some("application/json"),
     Some(BAD),
     &[
-        (Kind::SchemaValidation, "body/patties"),
-        (Kind::SchemaValidation, "body/vegetarian")
+        (Kind::SchemaValidation, "/patties"),
+        (Kind::SchemaValidation, "/vegetarian")
     ]
 );
 body_case!(
@@ -312,8 +356,8 @@ body_case!(
         r#"{"name":"Big Mac","patties":2,"vegetarian":true,"fat":10.0,"salt":false,"meat":"turkey"}"#
     ),
     &[
-        (Kind::SchemaValidation, "body/salt"),
-        (Kind::SchemaValidation, "body/meat")
+        (Kind::SchemaValidation, "/salt"),
+        (Kind::SchemaValidation, "/meat")
     ]
 );
 // Upstream calls this AllOfAnyOf, but its actual schema combines allOf and
@@ -336,7 +380,7 @@ body_case!(
     BURGER_PATH,
     Some("application/json"),
     Some(NUTRIENTS),
-    &[(Kind::SchemaValidation, "body")]
+    &[(Kind::SchemaValidation, "")]
 );
 body_case!(
     invalid_schema_min_max,
@@ -345,7 +389,7 @@ body_case!(
     BURGER_PATH,
     Some("application/json"),
     Some(r#"{"name":"Big Mac","patties":5,"vegetarian":true,"fat":10.0,"salt":0.5,"meat":"beef"}"#),
-    &[(Kind::SchemaValidation, "body/patties")]
+    &[(Kind::SchemaValidation, "/patties")]
 );
 body_case!(
     invalid_schema_bad_decode,
@@ -354,7 +398,7 @@ body_case!(
     BURGER_PATH,
     Some("application/json"),
     Some(r#"{"bad":"json",}"#),
-    &[(Kind::InvalidBody, "body")]
+    &[(Kind::InvalidBody, "")]
 );
 body_case!(
     schema_no_type_issue75,
@@ -363,7 +407,7 @@ body_case!(
     "/path1",
     Some("application/json"),
     None,
-    &[(Kind::MissingRequiredBody, "body")]
+    &[(Kind::MissingRequiredBody, "")]
 );
 body_case!(
     urlencoded_request_integer,
@@ -381,7 +425,7 @@ body_case!(
     BURGER_PATH,
     Some("application/x-www-form-urlencoded"),
     Some("name=cheeseburger&patties=23.4"),
-    &[(Kind::SchemaValidation, "body/patties")]
+    &[(Kind::SchemaValidation, "/patties")]
 );
 body_case!(
     xml_request_fragment,
@@ -399,7 +443,7 @@ body_case!(
     BURGER_PATH,
     Some("application/xml"),
     Some(""),
-    &[(Kind::InvalidBody, "body")]
+    &[(Kind::InvalidBody, "")]
 );
 body_case!(
     xml_request_transformations,
@@ -421,7 +465,7 @@ fn invalid_schema_max_items() {
             &spec,
             &request("POST", BURGER_PATH, Some("application/json"), Some(&body)),
         ),
-        &[(Kind::SchemaValidation, "body")],
+        &[(Kind::SchemaValidation, "")],
     );
 }
 
@@ -436,7 +480,7 @@ fn schema_min_max_boundaries() {
             &request("POST", BURGER_PATH, Some("application/json"), Some(&body)),
         );
         if patties == 0 || patties == 4 {
-            assert_errors(result, &[(Kind::SchemaValidation, "body/patties")]);
+            assert_errors(result, &[(Kind::SchemaValidation, "/patties")]);
         } else {
             assert_valid(result);
         }
@@ -465,7 +509,7 @@ fn schema_no_type_any_of_data_controls() {
         if valid {
             assert_valid(result);
         } else {
-            assert_errors(result, &[(Kind::SchemaValidation, "body")]);
+            assert_errors(result, &[(Kind::SchemaValidation, "")]);
         }
     }
 }
@@ -496,8 +540,8 @@ fn replacing_request_body_does_not_reuse_previous_data() {
     assert_errors(
         run(&spec, &req),
         &[
-            (Kind::SchemaValidation, "body/patties"),
-            (Kind::SchemaValidation, "body/vegetarian"),
+            (Kind::SchemaValidation, "/patties"),
+            (Kind::SchemaValidation, "/vegetarian"),
         ],
     );
     req.body = Some(GOOD.as_bytes().to_vec());
@@ -517,7 +561,7 @@ fn boolean_exclusive_minimum_openapi30() {
     );
     assert_error_paths(
         validate(&spec, json!({"exclusiveNumber":10})),
-        &["body/exclusiveNumber"],
+        &["/exclusiveNumber"],
     );
     assert_valid(validate(&spec, json!({"exclusiveNumber":13})));
 }
@@ -535,7 +579,7 @@ fn numeric_exclusive_minimum_openapi31() {
     assert_valid(validate(&spec, json!({"exclusiveNumber":15})));
     assert_error_paths(
         validate(&spec, json!({"exclusiveNumber":12})),
-        &["body/exclusiveNumber"],
+        &["/exclusiveNumber"],
     );
 }
 
@@ -555,7 +599,7 @@ fn nested_read_only_required_ignored() {
         json!({"profile":{"email":"john@example.com"}}),
     ));
     // Keep the non-readOnly requirement enforced after pruning.
-    assert_error_paths(validate(&spec, json!({"profile":{}})), &["body/profile"]);
+    assert_error_paths(validate(&spec, json!({"profile":{}})), &["/profile/email"]);
 }
 
 #[test]
@@ -570,7 +614,7 @@ fn all_of_read_only_required_ignored() {
         json!({}),
     );
     assert_valid(validate(&spec, json!({"name":"John"})));
-    assert_error_paths(validate(&spec, json!({})), &["body"]);
+    assert_error_paths(validate(&spec, json!({})), &["/name"]);
 }
 
 #[test]
@@ -595,7 +639,7 @@ fn vendor_json_decoder_compatibility() {
             &spec,
             &request("POST", "/test", Some(media_type), Some(r#"{"ok":"true"}"#)),
         ),
-        &["body/ok"],
+        &["/ok"],
     );
 }
 
@@ -608,7 +652,7 @@ fn legacy_validate_request_schema_malformed_json() {
             &spec,
             &request("POST", "/test", Some("application/json"), Some("{")),
         ),
-        &[(Kind::InvalidBody, "body")],
+        &[(Kind::InvalidBody, "")],
     );
 }
 

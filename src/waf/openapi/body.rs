@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::error::{ValidationError, ValidationErrorKind};
+use super::error::{ErrorClass, Location, Violation};
 use super::spec::CompiledMediaType;
 use super::{form, xml};
 
@@ -24,25 +24,29 @@ pub fn validate_body(
     media: Option<&CompiledMediaType>,
     kind: BodyKind,
     root: &Value,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) {
     let raw = match body {
         None | Some(b"") if body_required => {
-            errors.push(ValidationError {
-                kind: ValidationErrorKind::MissingRequiredBody,
-                message: "Request body is required but missing".to_string(),
-                path: "body".to_string(),
-            });
+            errors.push(Violation::new(
+                Location::Body,
+                ErrorClass::MissingRequired,
+                None,
+                "",
+                "Request body is required but missing",
+            ));
             return;
         }
         None => return,
         // An explicitly present but empty XML body is not a document.
         Some(b"") if kind == BodyKind::Xml => {
-            errors.push(ValidationError {
-                kind: ValidationErrorKind::InvalidBody,
-                message: "Request body is empty; expected an XML document".to_string(),
-                path: "body".to_string(),
-            });
+            errors.push(Violation::new(
+                Location::Body,
+                ErrorClass::InvalidSyntax,
+                Some("invalid_xml"),
+                "",
+                "Request body is empty; expected an XML document",
+            ));
             return;
         }
         Some(b"") => return,
@@ -51,11 +55,13 @@ pub fn validate_body(
 
     let decoded = match kind {
         BodyKind::Json => serde_json::from_slice::<Value>(raw).map_err(|e| {
-            vec![ValidationError {
-                kind: ValidationErrorKind::InvalidBody,
-                message: format!("Failed to parse request body as JSON: {e}"),
-                path: "body".to_string(),
-            }]
+            vec![Violation::new(
+                Location::Body,
+                ErrorClass::InvalidSyntax,
+                Some("invalid_json"),
+                "",
+                format!("Failed to parse request body as JSON: {e}"),
+            )]
         }),
         BodyKind::Form => form::decode(raw, media, root),
         BodyKind::Xml => xml::decode(raw, media, root),
@@ -71,13 +77,11 @@ pub fn validate_body(
     };
 
     if let Some(validator) = media.and_then(|m| m.schema_validator.as_ref()) {
-        for err in validator.iter_errors(&value) {
-            errors.push(ValidationError {
-                kind: ValidationErrorKind::SchemaValidation,
-                message: err.to_string(),
-                path: format!("body{}", err.instance_path()),
-            });
-        }
+        errors.extend(
+            validator.iter_errors(&value).map(|err| {
+                Violation::schema(Location::Body, &err.instance_path().to_string(), &err)
+            }),
+        );
     }
 }
 
@@ -101,7 +105,7 @@ mod tests {
         required: bool,
         media: Option<&CompiledMediaType>,
         kind: BodyKind,
-    ) -> Vec<ValidationError> {
+    ) -> Vec<Violation> {
         let mut errors = Vec::new();
         validate_body(body, required, media, kind, &Value::Null, &mut errors);
         errors
@@ -129,15 +133,16 @@ mod tests {
             json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}),
         );
         let errors = run(Some(br#"{"age": 25}"#), true, Some(&m), BodyKind::Json);
-        assert_eq!(errors[0].kind, ValidationErrorKind::SchemaValidation);
-        assert_eq!(errors[0].path, "body");
+        assert_eq!(errors[0].class, ErrorClass::MissingRequired);
+        assert_eq!(errors[0].target, "/name");
     }
 
     #[test]
     fn test_missing_required_body() {
         let errors = run(None, true, None, BodyKind::Json);
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ValidationErrorKind::MissingRequiredBody);
+        assert_eq!(errors[0].class, ErrorClass::MissingRequired);
+        assert_eq!(errors[0].target, "");
     }
 
     #[test]
@@ -155,7 +160,7 @@ mod tests {
     fn test_invalid_json() {
         let errors = run(Some(b"not json"), true, None, BodyKind::Json);
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ValidationErrorKind::InvalidBody);
+        assert_eq!(errors[0].class, ErrorClass::InvalidSyntax);
     }
 
     #[test]

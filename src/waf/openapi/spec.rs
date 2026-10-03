@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::coerce::resolve_pointer;
 use super::content_type::media_type_matches;
 use super::dialect;
-use super::error::{SpecError, ValidationError, ValidationErrorKind};
+use super::error::{SpecError, Unmatched};
 
 /// URI under which the OpenAPI document is registered with the schema
 /// engine, so every `#/components/...` reference resolves against it.
@@ -17,6 +17,9 @@ const SPEC_URI: &str = "urn:openapi-validator:spec";
 
 /// Pre-compiled OpenAPI spec optimized for per-request validation.
 pub struct CompiledSpec {
+    /// Path prefixes from `servers`, longest first. Request paths must start
+    /// with one of them; empty when the servers declare no path.
+    base_paths: Vec<String>,
     /// Radix-tree router from request path to the route's compiled operations.
     router: Router<CompiledRoute>,
     /// The OpenAPI document after dialect rewrites, used to follow `$ref`s at
@@ -24,9 +27,18 @@ pub struct CompiledSpec {
     document: Arc<Value>,
 }
 
+impl std::fmt::Debug for CompiledSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompiledSpec")
+            .field("base_paths", &self.base_paths)
+            .finish_non_exhaustive()
+    }
+}
+
 impl Default for CompiledSpec {
     fn default() -> Self {
         Self {
+            base_paths: Vec::new(),
             router: Router::new(),
             document: Arc::new(Value::Null),
         }
@@ -144,20 +156,21 @@ pub struct CompiledMediaType {
 }
 
 /// Result of matching a request path against the compiled spec.
-pub struct MatchedRoute<'a> {
+pub struct MatchedRoute<'s, 'p> {
     /// The OpenAPI path template that matched.
-    pub template: &'a str,
-    /// Captured path parameter name-value pairs, in template order.
-    pub params: Vec<(&'a str, &'a str)>,
-    route: &'a CompiledRoute,
+    pub template: &'s str,
+    /// Captured path parameter names (from the template) and values (from
+    /// the request path), in template order.
+    pub params: Vec<(&'s str, &'p str)>,
+    route: &'s CompiledRoute,
 }
 
-impl<'a> MatchedRoute<'a> {
+impl<'s> MatchedRoute<'s, '_> {
     /// Look up the operation for an HTTP method on this route.
     ///
     /// A HEAD request falls back to the GET operation when the spec does not
     /// declare HEAD, since servers answer HEAD from the GET handler.
-    pub fn check_method(&self, method: &str) -> Result<&'a CompiledOperation, ValidationError> {
+    pub fn check_method(&self, method: &str) -> Result<&'s CompiledOperation, Unmatched> {
         let method_upper = method.to_ascii_uppercase();
         self.route
             .operations
@@ -168,18 +181,9 @@ impl<'a> MatchedRoute<'a> {
                     .flatten()
             })
             .ok_or_else(|| {
-                let mut allowed: Vec<&str> =
-                    self.route.operations.keys().map(String::as_str).collect();
+                let mut allowed: Vec<String> = self.route.operations.keys().cloned().collect();
                 allowed.sort_unstable();
-                ValidationError {
-                    kind: ValidationErrorKind::MethodNotAllowed,
-                    message: format!(
-                        "Method '{method}' is not allowed for path '{}'. Allowed: {}",
-                        self.template,
-                        allowed.join(", ")
-                    ),
-                    path: "method".to_string(),
-                }
+                Unmatched::Method { allowed }
             })
     }
 }
@@ -191,6 +195,18 @@ impl CompiledSpec {
         compile_document(doc)
     }
 
+    /// Parse an OpenAPI 3.0.x or 3.1.x document from YAML text and compile it.
+    pub fn from_yaml(yaml: &str) -> Result<Self, SpecError> {
+        let doc: Value = serde_yaml::from_str(yaml).map_err(|e| SpecError::Parse(e.to_string()))?;
+        compile_document(doc)
+    }
+
+    /// The path prefixes declared by `servers`, longest first.
+    #[cfg(test)]
+    pub fn base_paths(&self) -> &[String] {
+        &self.base_paths
+    }
+
     /// The OpenAPI document after dialect rewrites.
     pub fn document(&self) -> &Value {
         &self.document
@@ -199,15 +215,65 @@ impl CompiledSpec {
     /// Find a route matching the given request path.
     ///
     /// The path must already be percent-decoded and must not contain the query
-    /// string. A trailing slash is ignored, so `/users/` matches `/users`.
-    pub fn match_route<'a>(&'a self, request_path: &'a str) -> Option<MatchedRoute<'a>> {
-        let m = self.router.at(normalize_path(request_path)).ok()?;
+    /// string. When `servers` declare a path, the request path must start with
+    /// one of them. A trailing slash is ignored, so `/users/` matches `/users`.
+    pub fn match_route<'s, 'p>(&'s self, request_path: &'p str) -> Option<MatchedRoute<'s, 'p>> {
+        let relative = if self.base_paths.is_empty() {
+            request_path
+        } else {
+            self.base_paths.iter().find_map(|base| {
+                let rest = request_path.strip_prefix(base.as_str())?;
+                (rest.is_empty() || rest.starts_with('/')).then_some(rest)
+            })?
+        };
+        let m = self.router.at(normalize_path(relative)).ok()?;
         Some(MatchedRoute {
             template: m.value.template.as_str(),
             params: m.params.iter().collect(),
             route: m.value,
         })
     }
+}
+
+/// The path component of each server URL, with `{variables}` replaced by
+/// their defaults. Only non-empty paths count; an empty result means the
+/// spec's paths are served from the root.
+fn base_paths(doc: &Value) -> Result<Vec<String>, SpecError> {
+    let Some(servers) = doc.get("servers").and_then(Value::as_array) else {
+        return Ok(Vec::new());
+    };
+    let mut paths: Vec<String> = Vec::new();
+    for server in servers {
+        let Some(url) = server.get("url").and_then(Value::as_str) else {
+            return Err(SpecError::Parse("server object has no 'url'".to_string()));
+        };
+        let mut url = url.to_string();
+        if let Some(variables) = server.get("variables").and_then(Value::as_object) {
+            for (name, variable) in variables {
+                let default = variable
+                    .get("default")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        SpecError::Parse(format!("server variable '{name}' has no default"))
+                    })?;
+                url = url.replace(&format!("{{{name}}}"), default);
+            }
+        }
+        // Drop the scheme and authority of an absolute URL.
+        let path = match url.find("://") {
+            Some(i) => {
+                let rest = &url[i + 3..];
+                rest.find('/').map_or("", |j| &rest[j..])
+            }
+            None => url.as_str(),
+        };
+        let path = path.trim_end_matches('/');
+        if !path.is_empty() && !paths.iter().any(|p| p == path) {
+            paths.push(path.to_string());
+        }
+    }
+    paths.sort_by_key(|p| std::cmp::Reverse(p.len()));
+    Ok(paths)
 }
 
 /// Strip trailing slashes so templates and request paths compare consistently.
@@ -318,6 +384,8 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
         )));
     }
 
+    let base_paths = base_paths(&doc)?;
+
     if dialect::is_openapi_30(&version) {
         dialect::apply_openapi_30(&mut doc)?;
     }
@@ -339,6 +407,7 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
     let (root_pointer, root) = document.node();
     let Some((paths_pointer, paths)) = document.child(&root_pointer, root, "paths") else {
         return Ok(CompiledSpec {
+            base_paths,
             router: Router::new(),
             document: document.root,
         });
@@ -442,6 +511,7 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
     }
 
     Ok(CompiledSpec {
+        base_paths,
         router,
         document: document.root,
     })
@@ -765,8 +835,12 @@ mod tests {
             .check_method("DELETE")
             .err()
             .expect("DELETE must be rejected");
-        assert_eq!(err.kind, ValidationErrorKind::MethodNotAllowed);
-        assert!(err.message.contains("Allowed: GET"));
+        assert_eq!(
+            err,
+            Unmatched::Method {
+                allowed: vec!["GET".to_string()]
+            }
+        );
     }
 
     #[test]
@@ -867,5 +941,101 @@ mod tests {
             CompiledSpec::from_json("not json"),
             Err(SpecError::Parse(_))
         ));
+    }
+
+    #[test]
+    fn yaml_documents_compile() {
+        let spec = CompiledSpec::from_yaml(
+            r#"
+openapi: 3.0.3
+info: {title: t, version: "1"}
+components:
+  schemas:
+    Pet: &pet
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+paths:
+  /pets:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *pet
+      responses:
+        200: {description: ok}
+"#,
+        )
+        .unwrap();
+        let op = spec
+            .match_route("/pets")
+            .unwrap()
+            .check_method("POST")
+            .unwrap();
+        let v = op.request_body.as_ref().unwrap().content[0]
+            .schema_validator
+            .as_ref()
+            .unwrap();
+        assert!(v.is_valid(&json!({"name": "Rex"})));
+        assert!(!v.is_valid(&json!({})));
+
+        assert!(matches!(
+            CompiledSpec::from_yaml("openapi: [").unwrap_err(),
+            SpecError::Parse(_)
+        ));
+    }
+
+    fn spec_with_servers(servers: &str) -> CompiledSpec {
+        CompiledSpec::from_json(&format!(
+            r#"{{"openapi": "3.1.0", "info": {{"title": "t", "version": "1"}}, "servers": {servers},
+                "paths": {{"/pets": {{"get": {{"responses": {{"200": {{"description": "ok"}}}}}}}}}}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn server_paths_prefix_every_route() {
+        let spec = spec_with_servers(
+            r#"[{"url": "https://api.example.com/v1/"}, {"url": "/v2"},
+                {"url": "https://{env}.example.com/{version}", "variables": {
+                    "env": {"default": "prod"}, "version": {"default": "v3", "enum": ["v3", "v4"]}}}]"#,
+        );
+        assert_eq!(spec.base_paths(), ["/v1", "/v2", "/v3"]);
+        assert!(spec.match_route("/v1/pets").is_some());
+        assert!(spec.match_route("/v2/pets/").is_some());
+        assert!(spec.match_route("/v3/pets").is_some());
+        assert!(spec.match_route("/pets").is_none(), "base path is required");
+        assert!(
+            spec.match_route("/v10/pets").is_none(),
+            "prefix must end at a segment"
+        );
+    }
+
+    #[test]
+    fn servers_without_a_path_leave_routes_at_the_root() {
+        let spec = spec_with_servers(r#"[{"url": "https://api.example.com"}, {"url": "/"}]"#);
+        assert!(spec.base_paths().is_empty());
+        assert!(spec.match_route("/pets").is_some());
+
+        let longest_first = spec_with_servers(r#"[{"url": "/api"}, {"url": "/api/v1"}]"#);
+        assert_eq!(longest_first.base_paths(), ["/api/v1", "/api"]);
+        assert!(longest_first.match_route("/api/v1/pets").is_some());
+        assert!(longest_first.match_route("/api/pets").is_some());
+    }
+
+    #[test]
+    fn server_variables_need_defaults() {
+        let err = CompiledSpec::from_json(
+            r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"},
+                "servers": [{"url": "/{v}", "variables": {"v": {"enum": ["a"]}}}], "paths": {}}"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("server variable 'v' has no default"),
+            "{err}"
+        );
     }
 }

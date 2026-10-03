@@ -1,7 +1,7 @@
 use mime::Mime;
 
 use super::body::BodyKind;
-use super::error::{ValidationError, ValidationErrorKind};
+use super::error::{ErrorClass, Location, Violation};
 
 /// Parse a `Content-Type` header value or a spec media type into a [`Mime`].
 ///
@@ -64,7 +64,7 @@ pub fn media_type_matches(expected: &Mime, actual: &Mime) -> bool {
 pub fn validate_content_type(
     request_content_type: Option<&str>,
     expected_media_types: &[&Mime],
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) {
     if expected_media_types.is_empty() {
         return;
@@ -77,29 +77,38 @@ pub fn validate_content_type(
             .collect::<Vec<_>>()
             .join(", ")
     };
+    let report = |class, detail, message| {
+        Violation::new(
+            Location::Header,
+            class,
+            Some(detail),
+            "content-type",
+            message,
+        )
+    };
 
     let Some(raw) = request_content_type else {
-        errors.push(ValidationError {
-            kind: ValidationErrorKind::UnsupportedContentType,
-            message: format!(
+        errors.push(report(
+            ErrorClass::InvalidMediaType,
+            "missing",
+            format!(
                 "Missing Content-Type header. Expected one of: {}",
                 expected_list()
             ),
-            path: "header.Content-Type".to_string(),
-        });
+        ));
         return;
     };
 
     let Some(actual) = parse_media_type(raw) else {
-        errors.push(ValidationError {
-            kind: ValidationErrorKind::UnsupportedContentType,
-            message: format!(
+        errors.push(report(
+            ErrorClass::InvalidMediaType,
+            "malformed",
+            format!(
                 "Malformed Content-Type '{}'. Expected one of: {}",
                 raw.trim(),
                 expected_list()
             ),
-            path: "header.Content-Type".to_string(),
-        });
+        ));
         return;
     };
 
@@ -107,15 +116,15 @@ pub fn validate_content_type(
         .iter()
         .any(|expected| media_type_matches(expected, &actual))
     {
-        errors.push(ValidationError {
-            kind: ValidationErrorKind::UnsupportedContentType,
-            message: format!(
+        errors.push(report(
+            ErrorClass::UnsupportedMediaType,
+            "unsupported",
+            format!(
                 "Content-Type '{}' is not supported. Expected one of: {}",
                 actual.essence_str(),
                 expected_list()
             ),
-            path: "header.Content-Type".to_string(),
-        });
+        ));
     }
 }
 
@@ -123,7 +132,7 @@ pub fn validate_content_type(
 mod tests {
     use super::*;
 
-    fn check(request: Option<&str>, expected: &[&str]) -> Vec<ValidationError> {
+    fn check(request: Option<&str>, expected: &[&str]) -> Vec<Violation> {
         let parsed: Vec<Mime> = expected.iter().map(|m| m.parse().unwrap()).collect();
         let refs: Vec<&Mime> = parsed.iter().collect();
         let mut errors = Vec::new();
@@ -170,12 +179,15 @@ mod tests {
     fn test_no_match() {
         let errors = check(Some("text/plain"), &["application/json"]);
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ValidationErrorKind::UnsupportedContentType);
+        assert_eq!(errors[0].class, ErrorClass::UnsupportedMediaType);
+        assert_eq!(errors[0].target, "content-type");
     }
 
     #[test]
     fn test_missing_content_type() {
-        assert_eq!(check(None, &["application/json"]).len(), 1);
+        let errors = check(None, &["application/json"]);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].class, ErrorClass::InvalidMediaType);
     }
 
     #[test]

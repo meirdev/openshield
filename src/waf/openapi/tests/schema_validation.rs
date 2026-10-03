@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::common::*;
 use crate::waf::openapi::CompiledSpec;
-use crate::waf::openapi::error::{SpecError, ValidationErrorKind};
+use crate::waf::openapi::error::{ErrorClass, SpecError};
 
 fn burger_schema() -> Value {
     json!({"type": "object", "properties": {
@@ -35,7 +35,7 @@ fn simple_invalid_reports_both_properties() {
             &spec,
             json!({"name": "Big Mac", "patties": "I am not a number", "vegetarian": 23}),
         ),
-        &["body/patties", "body/vegetarian"],
+        &["/patties", "/vegetarian"],
     );
 }
 
@@ -53,7 +53,7 @@ fn simple_invalid_multiple_array_items() {
                 {"name": "Big Mac", "patties": 2, "vegetarian": false}
             ]),
         ),
-        &["body/0", "body/1/patties"],
+        &["/0/name", "/1/patties"],
     );
 }
 
@@ -62,10 +62,11 @@ fn bad_json_is_a_parse_error() {
     let spec = compile("3.1.0", burger_schema(), json!({}));
     let errors = assert_invalid(
         validate_raw(&spec, "application/json", r#"{"bad": "json",}"#),
-        ValidationErrorKind::InvalidBody,
+        ErrorClass::InvalidSyntax,
     );
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].path, "body");
+    assert_eq!(errors[0].target, "");
+    assert_eq!(errors[0].detail.as_deref(), Some("invalid_json"));
 }
 
 fn reffy_spec() -> CompiledSpec {
@@ -118,7 +119,7 @@ fn reffy_complex_invalid() {
                 &spec,
                 json!({"two": {"three": {"four": {"cakeOrDeath": choice}}}}),
             ),
-            &["body/two/three/four"],
+            &["/two/three/four"],
         );
     }
 }
@@ -135,7 +136,7 @@ fn v3_1_numeric_exclusive_minimum() {
     assert_valid(validate(&spec, json!({"amount": 3})));
     // Boundary controls in addition to the upstream positive example.
     for amount in [0, -1] {
-        assert_error_paths(validate(&spec, json!({"amount": amount})), &["body/amount"]);
+        assert_error_paths(validate(&spec, json!({"amount": amount})), &["/amount"]);
     }
 }
 
@@ -172,7 +173,7 @@ fn v3_1_dependent_schemas_original_not_valid() {
         "cream": 2.5
     }"#,
         ),
-        ValidationErrorKind::InvalidBody,
+        ErrorClass::InvalidSyntax,
     );
 }
 
@@ -182,7 +183,7 @@ fn v3_1_dependent_schemas_triggered() {
     // Exercise the actual dependency as well: it triggers inside fishCake.
     assert_error_paths(
         validate(&spec, json!({"fishCake": {"fishCake": {}, "bones": true}})),
-        &["body/fishCake"],
+        &["/fishCake/cream"],
     );
     assert_valid(validate(
         &spec,
@@ -201,7 +202,7 @@ fn one_of_multiple_matches_issue520() {
         json!({}),
     );
     // Neither branch requires its property, so both match this object.
-    assert_error_paths(validate(&spec, json!({"pam": "nop"})), &["body"]);
+    assert_error_paths(validate(&spec, json!({"pam": "nop"})), &[""]);
 }
 
 #[test]
@@ -228,7 +229,7 @@ fn one_of_no_matches() {
         ]}),
         json!({}),
     );
-    assert_error_paths(validate(&spec, json!({"baz": "invalid"})), &["body"]);
+    assert_error_paths(validate(&spec, json!({"baz": "invalid"})), &[""]);
 }
 
 #[test]
@@ -252,7 +253,7 @@ fn one_of_simple_types_ambiguous_pattern() {
         ]}),
         json!({}),
     );
-    assert_error_paths(validate(&spec, json!("123")), &["body"]);
+    assert_error_paths(validate(&spec, json!("123")), &[""]);
 }
 
 fn product_spec() -> CompiledSpec {
@@ -297,7 +298,7 @@ fn discriminator_one_of_with_refs_invalid_data() {
             &product_spec(),
             json!({"productName": "Widget", "quantity": 1}),
         ),
-        &["body"],
+        &[""],
     );
 }
 
@@ -353,7 +354,7 @@ fn scalar_coercion_disabled_by_default() {
     );
     assert_error_paths(
         validate(&spec, json!({"active": "true", "count": "42"})),
-        &["body/active", "body/count"],
+        &["/active", "/count"],
     );
     assert_valid(validate(&spec, json!({"active": true, "count": 42})));
 }
@@ -369,6 +370,6 @@ fn scalar_coercion_invalid_strings() {
     );
     assert_error_paths(
         validate(&spec, json!({"active": "yes", "count": "abc"})),
-        &["body/active", "body/count"],
+        &["/active", "/count"],
     );
 }

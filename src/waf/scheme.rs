@@ -112,6 +112,29 @@ pub fn build(score_names: &[String], token_ids: &[String]) -> Scheme {
         opt!(b, &format!("{name}.values"), Arr<Int>);
     }
 
+    {
+        use crate::waf::populate::schema::{LOCATIONS, PREFIX};
+        opt!(b, &format!("{PREFIX}.schema"), Str);
+        opt!(b, &format!("{PREFIX}.operation.matched"), Bool);
+        opt!(b, &format!("{PREFIX}.operation.template"), Str);
+        opt!(b, &format!("{PREFIX}.violated"), Bool);
+        for (_, segment) in LOCATIONS {
+            opt!(
+                b,
+                &format!("{PREFIX}.{segment}.violated_parameters"),
+                Arr<Str>
+            );
+        }
+        opt!(
+            b,
+            &format!("{PREFIX}.query.undeclared_parameters"),
+            Arr<Str>
+        );
+        for field in ["location", "error_class", "error_detail", "target"] {
+            opt!(b, &format!("{PREFIX}.violation_details.{field}"), Str);
+        }
+    }
+
     opt!(b, "http.request.body.raw", Str);
     opt!(b, "http.request.body.size", Int);
     opt!(b, "http.request.body.truncated", Bool);

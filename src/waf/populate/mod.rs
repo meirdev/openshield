@@ -3,6 +3,7 @@ mod request_body;
 mod request_headers;
 mod response_body;
 mod response_headers;
+pub mod schema;
 
 use std::collections::HashMap;
 
@@ -11,6 +12,7 @@ pub use request_body::{body_fields, multipart_fields};
 pub use request_headers::request_fields;
 pub use response_body::response_body_fields;
 pub use response_headers::response_fields;
+pub use schema::{schema_body_fields, schema_fields};
 use wirefilter_engine::{Bytes as WfBytes, TypedArray, TypedMap};
 
 macro_rules! set_field {

@@ -93,3 +93,5 @@ Define WAF behavior with `rulesets`, named IP or string collections with `lists`
 Rules with `action: challenge` also require a `challenge` block. See [Turnstile challenges](challenges.md) for setup.
 
 To verify JSON Web Tokens and use their claims in rules, add `token_configurations`. See [JWT validation](jwt.md) for setup.
+
+To check requests against an OpenAPI document, add `schemas`. See [schema validation](schema-validation.md) for setup.

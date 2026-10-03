@@ -1,9 +1,11 @@
 //! Validation of HTTP requests against an OpenAPI 3.0.x or 3.1.x document.
 //!
 //! A [`CompiledSpec`] is built once from the document. Per request,
-//! [`validate_request`] matches the path and method, decodes and checks the
-//! path, query, header and cookie parameters, then checks the `Content-Type`
-//! and body against the operation's request body definition.
+//! [`CompiledSpec::match_operation`] finds the operation, then
+//! [`MatchedOperation::validate_parameters`] checks the path, query, header
+//! and cookie parameters and [`MatchedOperation::validate_body`] checks the
+//! `Content-Type` and body. The two steps are separate because a proxy sees
+//! the headers before the body. [`validate_request`] runs all of them.
 
 mod body;
 mod coerce;
@@ -17,70 +19,107 @@ mod spec;
 mod tests;
 mod xml;
 
-pub use error::{SpecError, ValidationError, ValidationErrorKind, ValidationResult};
-pub use spec::{CompiledOperation, CompiledSpec, MatchedRoute};
+#[cfg(test)]
+pub use error::ValidationResult;
+pub use error::{ErrorClass, Location, Unmatched, Violation};
+pub use spec::{CompiledOperation, CompiledSpec};
 
-/// A request to validate. `path` is percent-decoded and carries no query
-/// string; header names are matched case-insensitively.
-pub struct Request<'a> {
-    pub method: &'a str,
-    pub path: &'a str,
-    pub query: Option<&'a str>,
-    pub headers: &'a [(String, String)],
-    pub body: Option<&'a [u8]>,
+/// The outcome of looking up a request's operation.
+pub enum Match<'s, 'p> {
+    Operation(MatchedOperation<'s, 'p>),
+    Unmatched(Unmatched),
 }
 
-impl Request<'_> {
-    fn content_type(&self) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
-            .map(|(_, v)| v.as_str())
+/// An operation matched to a request path, ready to validate the request.
+pub struct MatchedOperation<'s, 'p> {
+    spec: &'s CompiledSpec,
+    /// The OpenAPI path template that matched.
+    pub template: &'s str,
+    /// Path parameters captured from the request path, in template order.
+    pub path_params: Vec<(&'s str, &'p str)>,
+    pub operation: &'s CompiledOperation,
+}
+
+impl CompiledSpec {
+    /// Find the operation for `method` and `path`. `path` is percent-decoded
+    /// and carries no query string.
+    pub fn match_operation<'s, 'p>(&'s self, method: &str, path: &'p str) -> Match<'s, 'p> {
+        let Some(route) = self.match_route(path) else {
+            return Match::Unmatched(Unmatched::Path);
+        };
+        match route.check_method(method) {
+            Ok(operation) => Match::Operation(MatchedOperation {
+                spec: self,
+                template: route.template,
+                path_params: route.params,
+                operation,
+            }),
+            Err(unmatched) => Match::Unmatched(unmatched),
+        }
     }
 }
 
-pub fn validate_request(spec: &CompiledSpec, request: &Request<'_>) -> ValidationResult {
-    let Some(matched) = spec.match_route(request.path) else {
-        return ValidationResult::Invalid(vec![ValidationError {
-            kind: ValidationErrorKind::PathNotFound,
-            message: format!("No matching path found for '{}'", request.path),
-            path: "path".to_string(),
-        }]);
-    };
-    let operation = match matched.check_method(request.method) {
-        Ok(op) => op,
-        Err(err) => return ValidationResult::Invalid(vec![err]),
-    };
+impl MatchedOperation<'_, '_> {
+    /// Check the path, query, header and cookie parameters. Header names are
+    /// matched case-insensitively; cookies are read from `Cookie` headers.
+    pub fn validate_parameters(
+        &self,
+        query: Option<&str>,
+        headers: &[(String, String)],
+    ) -> Vec<Violation> {
+        let root = self.spec.document();
+        let op = self.operation;
+        let mut violations = Vec::new();
 
-    let root = spec.document();
-    let mut errors = Vec::new();
+        params::validate_path_params(&self.path_params, &op.path_params, root, &mut violations);
 
-    params::validate_path_params(&matched.params, &operation.path_params, root, &mut errors);
+        let query_pairs = query.map(params::parse_query_string).unwrap_or_default();
+        params::validate_query_params(&query_pairs, &op.query_params, root, &mut violations);
 
-    let query_pairs = request
-        .query
-        .map(params::parse_query_string)
-        .unwrap_or_default();
-    params::validate_query_params(&query_pairs, &operation.query_params, root, &mut errors);
+        params::validate_header_params(headers, &op.header_params, root, &mut violations);
 
-    params::validate_header_params(request.headers, &operation.header_params, root, &mut errors);
+        let cookie_pairs = extract_cookies(headers);
+        params::validate_cookie_params(&cookie_pairs, &op.cookie_params, root, &mut violations);
 
-    let cookie_pairs = extract_cookies(request.headers);
-    params::validate_cookie_params(&cookie_pairs, &operation.cookie_params, root, &mut errors);
+        violations
+    }
 
-    if let Some(ref req_body) = operation.request_body {
+    /// Query parameter names in `query` that the operation does not declare.
+    pub fn undeclared_query_parameters(&self, query: &str) -> Vec<String> {
+        let root = self.spec.document();
+        let mut names: Vec<String> = params::parse_query_string(query)
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| {
+                !self
+                    .operation
+                    .query_params
+                    .iter()
+                    .any(|p| params::query_key_belongs_to(key, p, root))
+            })
+            .collect();
+        names.dedup();
+        names
+    }
+
+    /// Check the `Content-Type` and the body against the operation's request
+    /// body, if it declares one. `body` is `None` when the request has none.
+    pub fn validate_body(&self, content_type: Option<&str>, body: Option<&[u8]>) -> Vec<Violation> {
+        let mut violations = Vec::new();
+        let Some(req_body) = &self.operation.request_body else {
+            return violations;
+        };
+
         // A request that carries no body has nothing for Content-Type to
         // describe, so the header is only demanded when a body is present or
         // required.
-        let has_body = request.body.is_some_and(|b| !b.is_empty());
+        let has_body = body.is_some_and(|b| !b.is_empty());
         if has_body || req_body.required {
             let expected: Vec<&mime::Mime> = req_body.media_types().collect();
-            content_type::validate_content_type(request.content_type(), &expected, &mut errors);
+            content_type::validate_content_type(content_type, &expected, &mut violations);
         }
 
-        let request_media_type = request
-            .content_type()
-            .and_then(content_type::parse_media_type);
+        let request_media_type = content_type.and_then(content_type::parse_media_type);
         // The declared media type that accepts the request's Content-Type.
         let media = request_media_type
             .as_ref()
@@ -91,41 +130,49 @@ pub fn validate_request(spec: &CompiledSpec, request: &Request<'_>) -> Validatio
             .as_ref()
             .map_or(body::BodyKind::Json, content_type::body_kind);
         body::validate_body(
-            request.body,
+            body,
             req_body.required,
             media,
             kind,
-            root,
-            &mut errors,
+            self.spec.document(),
+            &mut violations,
         );
-    }
-
-    if errors.is_empty() {
-        ValidationResult::Valid
-    } else {
-        ValidationResult::Invalid(errors)
+        violations
     }
 }
 
-/// Query parameter names in `query` that `operation` does not declare.
-pub fn undeclared_query_parameters(
-    spec: &CompiledSpec,
-    operation: &CompiledOperation,
-    query: &str,
-) -> Vec<String> {
-    let root = spec.document();
-    let mut names: Vec<String> = params::parse_query_string(query)
-        .into_iter()
-        .map(|(key, _)| key)
-        .filter(|key| {
-            !operation
-                .query_params
-                .iter()
-                .any(|p| params::query_key_belongs_to(key, p, root))
-        })
-        .collect();
-    names.dedup();
-    names
+/// A whole request, for validating in one step.
+#[cfg(test)]
+pub struct Request<'a> {
+    pub method: &'a str,
+    pub path: &'a str,
+    pub query: Option<&'a str>,
+    pub headers: &'a [(String, String)],
+    pub body: Option<&'a [u8]>,
+}
+
+#[cfg(test)]
+pub fn validate_request(spec: &CompiledSpec, request: &Request<'_>) -> ValidationResult {
+    let operation = match spec.match_operation(request.method, request.path) {
+        Match::Operation(operation) => operation,
+        Match::Unmatched(unmatched) => return ValidationResult::Unmatched(unmatched),
+    };
+    let content_type = header(request.headers, "content-type");
+    let mut violations = operation.validate_parameters(request.query, request.headers);
+    violations.extend(operation.validate_body(content_type, request.body));
+    if violations.is_empty() {
+        ValidationResult::Valid
+    } else {
+        ValidationResult::Invalid(violations)
+    }
+}
+
+#[cfg(test)]
+fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.as_str())
 }
 
 /// Extract cookies from the Cookie header into key-value pairs.
@@ -219,6 +266,13 @@ mod unit_tests {
         )
     }
 
+    fn violations(result: ValidationResult) -> Vec<Violation> {
+        match result {
+            ValidationResult::Invalid(v) => v,
+            other => panic!("expected violations, got {other:?}"),
+        }
+    }
+
     #[test]
     fn valid_get_request() {
         assert!(get("/users", Some("page=1&limit=10")).is_valid());
@@ -227,19 +281,27 @@ mod unit_tests {
 
     #[test]
     fn unmatched_path_and_method() {
-        assert_eq!(get("/nonexistent", None).http_status(), Some(404));
+        let result = get("/nonexistent", None);
+        assert!(matches!(
+            result,
+            ValidationResult::Unmatched(Unmatched::Path)
+        ));
+        assert_eq!(result.http_status(), Some(404));
 
-        let headers = [];
         let result = validate_request(
             &spec(),
             &Request {
                 method: "DELETE",
                 path: "/users",
                 query: None,
-                headers: &headers,
+                headers: &[],
                 body: None,
             },
         );
+        assert!(matches!(
+            &result,
+            ValidationResult::Unmatched(Unmatched::Method { allowed }) if allowed == &["GET", "POST"]
+        ));
         assert_eq!(result.http_status(), Some(405));
     }
 
@@ -247,16 +309,47 @@ mod unit_tests {
     fn missing_required_query_param() {
         let result = get("/users", Some("limit=10"));
         assert_eq!(result.http_status(), Some(400));
+        let v = violations(result);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].location, Location::Query);
+        assert_eq!(v[0].class, ErrorClass::MissingRequired);
+        assert_eq!(v[0].target, "page");
+    }
+
+    #[test]
+    fn wrongly_typed_query_param() {
+        let v = violations(get("/users", Some("page=abc")));
+        assert_eq!(v[0].location, Location::Query);
+        assert_eq!(v[0].class, ErrorClass::InvalidType);
+        assert_eq!(v[0].target, "page");
+        assert!(
+            v[0].message.contains("query parameter 'page'"),
+            "{}",
+            v[0].message
+        );
     }
 
     #[test]
     fn body_validation() {
         assert!(post("application/json", Some(br#"{"name": "Alice"}"#)).is_valid());
-        assert!(
-            !post("application/json", None).is_valid(),
-            "body is required"
+
+        let v = violations(post("application/json", None));
+        assert_eq!(
+            (v[0].location, v[0].class),
+            (Location::Body, ErrorClass::MissingRequired)
         );
-        assert!(!post("application/json", Some(br#"{"email": "a@example.com"}"#)).is_valid());
+        assert_eq!(v[0].target, "");
+
+        let v = violations(post(
+            "application/json",
+            Some(br#"{"email": "a@example.com"}"#),
+        ));
+        assert_eq!(
+            (v[0].location, v[0].class),
+            (Location::Body, ErrorClass::MissingRequired)
+        );
+        assert_eq!(v[0].target, "/name");
+
         // The media type is matched case-insensitively, so the schema applies.
         assert_eq!(
             post(
@@ -266,10 +359,38 @@ mod unit_tests {
             .http_status(),
             Some(400)
         );
+
+        let result = post("text/plain", Some(b"not json"));
+        assert_eq!(result.http_status(), Some(415));
+        let v = violations(result);
         assert_eq!(
-            post("text/plain", Some(b"not json")).http_status(),
-            Some(415)
+            (v[0].location, v[0].class),
+            (Location::Header, ErrorClass::UnsupportedMediaType)
         );
+        assert_eq!(v[0].target, "content-type");
+    }
+
+    #[test]
+    fn parameters_and_body_validate_separately() {
+        let spec = spec();
+        let Match::Operation(op) = spec.match_operation("POST", "/users") else {
+            panic!("expected a match");
+        };
+        assert_eq!(op.template, "/users");
+        assert!(op.validate_parameters(None, &[]).is_empty());
+        let v = op.validate_body(Some("application/json"), Some(b"{}"));
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].target, "/name");
+
+        let Match::Operation(op) = spec.match_operation("GET", "/users/7") else {
+            panic!("expected a match");
+        };
+        assert_eq!(op.path_params, [("id", "7")]);
+        assert!(
+            op.validate_body(None, None).is_empty(),
+            "GET declares no body"
+        );
+        assert_eq!(op.undeclared_query_parameters("id=1&x=2&x=3"), ["id", "x"]);
     }
 
     #[test]

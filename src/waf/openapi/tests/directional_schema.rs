@@ -42,7 +42,7 @@ fn request_keeps_write_only_required_properties() {
     ));
     assert_error_paths(
         validate(&spec, json!({"id": "1", "name": "Alice"})),
-        &["body"],
+        &["/password"],
     );
 }
 
@@ -97,6 +97,6 @@ fn directional_required_across_references_missing_secret() {
     // Includes the readOnly id to isolate the writeOnly requirement.
     assert_error_paths(
         validate(&referenced_product(), json!({"id": "p1", "name": "Desk"})),
-        &["body"],
+        &["/secret"],
     );
 }

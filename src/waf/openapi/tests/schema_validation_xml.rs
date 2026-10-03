@@ -5,7 +5,7 @@
 use serde_json::{Value, json};
 
 use super::common::*;
-use crate::waf::openapi::error::ValidationErrorKind;
+use crate::waf::openapi::error::ErrorClass;
 
 const XML: &str = "application/xml";
 
@@ -27,10 +27,7 @@ fn issue346_basic_xml_with_name() {
 fn malformed_xml_empty() {
     let spec = xml_spec(json!({"type": "object", "xml": {"name": "Cat"}}));
     // Through the request API, empty content is a missing required body.
-    assert_invalid(
-        validate_raw(&spec, XML, ""),
-        ValidationErrorKind::MissingRequiredBody,
-    );
+    assert_invalid(validate_raw(&spec, XML, ""), ErrorClass::MissingRequired);
 }
 
 #[test]
@@ -39,7 +36,7 @@ fn malformed_xml_syntax() {
     let spec = xml_spec(json!({"type": "object", "xml": {"name": "Cat"}}));
     assert_invalid(
         validate_raw(&spec, XML, "<Cat><nice>"),
-        ValidationErrorKind::InvalidBody,
+        ErrorClass::InvalidSyntax,
     );
 }
 

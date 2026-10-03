@@ -11,7 +11,7 @@ use roxmltree::{Document, Node};
 use serde_json::{Map, Value};
 
 use super::coerce::{self, deref};
-use super::error::{ValidationError, ValidationErrorKind};
+use super::error::{ErrorClass, Location, Violation};
 use super::spec::CompiledMediaType;
 
 /// Deepest element nesting converted. Bounds recursion in [`convert`].
@@ -21,9 +21,16 @@ pub fn decode(
     raw: &[u8],
     media: Option<&CompiledMediaType>,
     root: &Value,
-) -> Result<Value, Vec<ValidationError>> {
-    let text = std::str::from_utf8(raw)
-        .map_err(|_| vec![invalid_body("XML body is not valid UTF-8".to_string())])?;
+) -> Result<Value, Vec<Violation>> {
+    let text = std::str::from_utf8(raw).map_err(|_| {
+        vec![Violation::new(
+            Location::Body,
+            ErrorClass::InvalidEncoding,
+            Some("invalid_utf8"),
+            "",
+            "XML body is not valid UTF-8",
+        )]
+    })?;
     // A body made of several top-level elements (a fragment) is accepted by
     // wrapping it in a synthetic root, which then plays the object's role.
     let wrapped;
@@ -38,9 +45,10 @@ pub fn decode(
                     doc
                 }
                 _ => {
-                    return Err(vec![invalid_body(format!(
-                        "Failed to parse request body as XML: {error}"
-                    ))]);
+                    return Err(vec![invalid_xml(
+                        "",
+                        format!("Failed to parse request body as XML: {error}"),
+                    )]);
                 }
             }
         }
@@ -54,18 +62,17 @@ pub fn decode(
     if let (false, Some(xml)) = (is_fragment, schema.and_then(|s| s.get("xml")))
         && !namespace_matches(element, xml)
     {
-        return Err(vec![ValidationError {
-            kind: ValidationErrorKind::SchemaValidation,
-            message: format!(
+        return Err(vec![namespace_mismatch(
+            "",
+            format!(
                 "Root element '{}' does not match the declared XML namespace or prefix",
                 element.tag_name().name()
             ),
-            path: "body".to_string(),
-        }]);
+        )]);
     }
 
     let mut errors = Vec::new();
-    let value = convert(element, schema, root, "body", 0, &mut errors);
+    let value = convert(element, schema, root, "", 0, &mut errors);
     if errors.is_empty() {
         Ok(value)
     } else {
@@ -85,12 +92,13 @@ fn convert(
     root: &Value,
     path: &str,
     depth: usize,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) -> Value {
     if depth > MAX_DEPTH {
-        errors.push(invalid_body(format!(
-            "XML nesting deeper than {MAX_DEPTH} levels at {path}"
-        )));
+        errors.push(invalid_xml(
+            path,
+            format!("XML nesting deeper than {MAX_DEPTH} levels"),
+        ));
         return Value::Null;
     }
     let schema = schema.map(|s| deref(root, s));
@@ -150,7 +158,7 @@ fn convert_object(
     root: &Value,
     path: &str,
     depth: usize,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) -> Value {
     let mappings = mappings(schema, root);
     let mut object = Map::new();
@@ -225,14 +233,13 @@ fn convert_object(
             }
             None => {
                 if let Some(m) = by_name.first() {
-                    errors.push(ValidationError {
-                        kind: ValidationErrorKind::SchemaValidation,
-                        message: format!(
+                    errors.push(namespace_mismatch(
+                        &format!("{path}/{}", m.property),
+                        format!(
                             "Element '{local_name}' does not match the XML namespace or prefix declared for property '{}'",
                             m.property
                         ),
-                        path: format!("{path}/{}", m.property),
-                    });
+                    ));
                 }
                 let child_path = format!("{path}/{local_name}");
                 let value = convert(child, None, root, &child_path, depth + 1, errors);
@@ -253,7 +260,7 @@ fn convert_wrapped_array(
     root: &Value,
     path: &str,
     depth: usize,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) -> Value {
     let items_xml = items_schema.and_then(|s| s.get("xml"));
     let item_name = items_xml
@@ -343,12 +350,24 @@ fn attribute_namespace_matches(attr: roxmltree::Attribute, xml: &Value) -> bool 
         .is_none_or(|expected_ns| attr.namespace() == Some(expected_ns))
 }
 
-fn invalid_body(message: String) -> ValidationError {
-    ValidationError {
-        kind: ValidationErrorKind::InvalidBody,
+fn invalid_xml(target: &str, message: String) -> Violation {
+    Violation::new(
+        Location::Body,
+        ErrorClass::InvalidSyntax,
+        Some("invalid_xml"),
+        target,
         message,
-        path: "body".to_string(),
-    }
+    )
+}
+
+fn namespace_mismatch(target: &str, message: String) -> Violation {
+    Violation::new(
+        Location::Body,
+        ErrorClass::ConstraintViolation,
+        Some("xml_namespace"),
+        target,
+        message,
+    )
 }
 
 #[cfg(test)]
@@ -377,7 +396,7 @@ mod tests {
         let depth = MAX_DEPTH + 2;
         let xml = format!("{}x{}", "<a>".repeat(depth), "</a>".repeat(depth));
         let errors = decode(xml.as_bytes(), None, &Value::Null).unwrap_err();
-        assert_eq!(errors[0].kind, ValidationErrorKind::InvalidBody);
+        assert_eq!(errors[0].class, ErrorClass::InvalidSyntax);
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 
-use crate::waf::openapi::error::{ValidationError, ValidationErrorKind, ValidationResult};
+use crate::waf::openapi::error::{ErrorClass, Location, ValidationResult, Violation};
 use crate::waf::openapi::{CompiledSpec, Request, validate_request};
 
 pub fn document(version: &str, media_type: &str, media: Value, schemas: Value) -> Value {
@@ -55,6 +55,17 @@ pub fn validate(spec: &CompiledSpec, body: Value) -> ValidationResult {
     validate_raw(spec, "application/json", &body.to_string())
 }
 
+/// Classes the JSON Schema engine reports, as opposed to decoding failures.
+pub fn is_schema_class(class: ErrorClass) -> bool {
+    matches!(
+        class,
+        ErrorClass::InvalidType
+            | ErrorClass::ConstraintViolation
+            | ErrorClass::MissingRequired
+            | ErrorClass::DuplicateValue
+    )
+}
+
 #[track_caller]
 pub fn assert_valid(result: ValidationResult) {
     assert!(
@@ -64,37 +75,53 @@ pub fn assert_valid(result: ValidationResult) {
     assert_eq!(result.http_status(), None);
 }
 
+/// Every violation is in the body and satisfies `class_ok`.
 #[track_caller]
-pub fn assert_invalid(result: ValidationResult, kind: ValidationErrorKind) -> Vec<ValidationError> {
+fn assert_body_violations(
+    result: ValidationResult,
+    class_ok: impl Fn(ErrorClass) -> bool,
+) -> Vec<Violation> {
     assert_eq!(result.http_status(), Some(400), "{result:#?}");
     match result {
-        ValidationResult::Invalid(errors) => {
+        ValidationResult::Invalid(violations) => {
             assert!(
-                !errors.is_empty(),
+                !violations.is_empty(),
                 "invalid results must explain the failure"
             );
-            for error in &errors {
-                assert_eq!(error.kind, kind, "{error:#?}");
-                assert!(!error.message.is_empty(), "{error:#?}");
-                assert!(error.path.starts_with("body"), "{error:#?}");
+            for v in &violations {
+                assert_eq!(v.location, Location::Body, "{v:#?}");
+                assert!(class_ok(v.class), "{v:#?}");
+                assert!(!v.message.is_empty(), "{v:#?}");
             }
-            errors
+            violations
         }
-        ValidationResult::Valid => panic!("expected rejection"),
+        other => panic!("expected rejection, got {other:#?}"),
     }
 }
 
+/// Rejected for any reason found in the body.
 #[track_caller]
-pub fn assert_schema_invalid(result: ValidationResult) -> Vec<ValidationError> {
-    assert_invalid(result, ValidationErrorKind::SchemaValidation)
+pub fn assert_rejected(result: ValidationResult) -> Vec<Violation> {
+    assert_body_violations(result, |_| true)
 }
 
 #[track_caller]
+pub fn assert_invalid(result: ValidationResult, class: ErrorClass) -> Vec<Violation> {
+    assert_body_violations(result, |c| c == class)
+}
+
+#[track_caller]
+pub fn assert_schema_invalid(result: ValidationResult) -> Vec<Violation> {
+    assert_body_violations(result, is_schema_class)
+}
+
+/// The violations' targets (JSON pointers into the body) are exactly `expected`.
+#[track_caller]
 pub fn assert_error_paths(result: ValidationResult, expected: &[&str]) {
-    let errors = assert_schema_invalid(result);
-    let mut paths: Vec<_> = errors.iter().map(|error| error.path.as_str()).collect();
-    paths.sort_unstable();
+    let violations = assert_schema_invalid(result);
+    let mut targets: Vec<_> = violations.iter().map(|v| v.target.as_str()).collect();
+    targets.sort_unstable();
     let mut expected = expected.to_vec();
     expected.sort_unstable();
-    assert_eq!(paths, expected, "{errors:#?}");
+    assert_eq!(targets, expected, "{violations:#?}");
 }

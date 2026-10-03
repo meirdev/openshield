@@ -114,6 +114,20 @@ fn main() {
         }
     };
 
+    // Schema validation
+    let schemas = match waf::schema::SchemaValidator::new(&config.schemas) {
+        Ok(s) => {
+            if !s.is_empty() {
+                info!("Schemas: {}", config.schemas.len());
+            }
+            s
+        }
+        Err(e) => {
+            error!("Failed to load schemas: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Lists
     let (ip_lists, bytes_lists) = waf::lists::build_from_config(&config.lists);
 
@@ -180,6 +194,7 @@ fn main() {
         scheme: scheme.clone(),
         engine,
         jwt,
+        schemas,
         max_request_body_buffer: config.max_request_body_buffer,
         request_body_limit_action: config.request_body_limit_action,
         inspect_response_body: config.inspect_response_body,

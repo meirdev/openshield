@@ -4,7 +4,7 @@
 use serde_json::{Map, Value};
 
 use super::coerce::{self, deref};
-use super::error::{ValidationError, ValidationErrorKind};
+use super::error::{ErrorClass, Location, Violation};
 use super::spec::CompiledMediaType;
 
 /// Deepest bracket nesting accepted in a field name such as `a[b][c]`.
@@ -22,10 +22,11 @@ pub fn decode(
     raw: &[u8],
     media: Option<&CompiledMediaType>,
     root: &Value,
-) -> Result<Value, Vec<ValidationError>> {
+) -> Result<Value, Vec<Violation>> {
     let text = std::str::from_utf8(raw).map_err(|_| {
-        vec![invalid_body(
-            "body",
+        vec![invalid_encoding(
+            "",
+            "invalid_utf8",
             "Form body is not valid UTF-8".to_string(),
         )]
     })?;
@@ -40,15 +41,17 @@ pub fn decode(
     for pair in text.split('&').filter(|p| !p.is_empty()) {
         let (raw_key, raw_value) = pair.split_once('=').unwrap_or((pair, ""));
         let key = percent_decode(raw_key).map_err(|e| {
-            vec![invalid_body(
-                "body",
+            vec![invalid_encoding(
+                "",
+                "percent_encoding",
                 format!("Malformed URL encoding in field name '{raw_key}': {e}"),
             )]
         })?;
         let (top, path) = split_bracket_path(&key);
         if path.len() > MAX_NESTING {
-            return Err(vec![invalid_body(
-                "body",
+            return Err(vec![invalid_encoding(
+                "",
+                "nesting",
                 format!("Field '{top}' is nested deeper than {MAX_NESTING} levels"),
             )]);
         }
@@ -64,21 +67,28 @@ pub fn decode(
     for (name, occurrences) in fields {
         let field_schema = coerce::property_schema(root, schema, &name);
         let field_encoding = encoding.and_then(|e| e.get(&name));
-        let field_path = format!("body/{name}");
+        let field_path = format!("/{name}");
 
         match decode_field(&name, &occurrences, field_schema, field_encoding, root) {
             Ok(value) => {
                 object.insert(name, value);
             }
             Err(e) => errors.push(match e {
-                FieldError::Encoding(msg) => invalid_body(&field_path, msg),
-                FieldError::Reserved => ValidationError {
-                    kind: ValidationErrorKind::SchemaValidation,
-                    message: format!(
+                FieldError::Encoding(msg) => invalid_encoding(&field_path, "percent_encoding", msg),
+                FieldError::Syntax(msg) => Violation::new(
+                    Location::Body,
+                    ErrorClass::InvalidSyntax,
+                    Some("invalid_json"),
+                    &field_path,
+                    msg,
+                ),
+                FieldError::Reserved => invalid_encoding(
+                    &field_path,
+                    "reserved_characters",
+                    format!(
                         "Field '{name}' contains reserved characters but its encoding does not set allowReserved"
                     ),
-                    path: field_path,
-                },
+                ),
             }),
         }
     }
@@ -92,6 +102,7 @@ pub fn decode(
 
 enum FieldError {
     Encoding(String),
+    Syntax(String),
     Reserved,
 }
 
@@ -127,7 +138,7 @@ fn decode_field(
         let decoded = percent_decode(raw).map_err(FieldError::Encoding)?;
         return if is_json_content_type(content_type) {
             serde_json::from_str(&decoded)
-                .map_err(|e| FieldError::Encoding(format!("Field '{name}' is not valid JSON: {e}")))
+                .map_err(|e| FieldError::Syntax(format!("Field '{name}' is not valid JSON: {e}")))
         } else {
             Ok(Value::String(decoded))
         };
@@ -341,12 +352,14 @@ fn percent_decode(input: &str) -> Result<String, String> {
     String::from_utf8(out).map_err(|_| "decoded value is not valid UTF-8".to_string())
 }
 
-fn invalid_body(path: &str, message: String) -> ValidationError {
-    ValidationError {
-        kind: ValidationErrorKind::InvalidBody,
+fn invalid_encoding(target: &str, detail: &str, message: String) -> Violation {
+    Violation::new(
+        Location::Body,
+        ErrorClass::InvalidEncoding,
+        Some(detail),
+        target,
         message,
-        path: path.to_string(),
-    }
+    )
 }
 
 #[cfg(test)]
@@ -386,7 +399,7 @@ mod tests {
         assert!(insert_path(&mut v, &deep, json!(1)).is_err());
 
         let sparse = decode(b"a[5]=1", None, &Value::Null).unwrap_err();
-        assert_eq!(sparse[0].kind, ValidationErrorKind::InvalidBody);
+        assert_eq!(sparse[0].class, ErrorClass::InvalidEncoding);
         let key = format!("a{}=1", "[b]".repeat(MAX_NESTING + 1));
         assert!(decode(key.as_bytes(), None, &Value::Null).is_err());
     }

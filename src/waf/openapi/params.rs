@@ -8,7 +8,7 @@
 use serde_json::{Map, Value};
 
 use super::coerce::{self, deref};
-use super::error::{ValidationError, ValidationErrorKind};
+use super::error::{ErrorClass, Location, Violation};
 use super::form;
 use super::spec::{CompiledParam, ParamStyle};
 
@@ -28,7 +28,7 @@ pub fn validate_path_params(
     captured: &[(&str, &str)],
     compiled_params: &[CompiledParam],
     root: &Value,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) {
     for param in compiled_params {
         let raw = captured
@@ -36,8 +36,10 @@ pub fn validate_path_params(
             .find(|(name, _)| *name == param.name)
             .map(|(_, v)| *v);
         match raw {
-            Some(raw) => validate_value(decode_path(raw, param, root), param, "path", errors),
-            None => report_missing(param, "path", errors),
+            Some(raw) => {
+                validate_value(decode_path(raw, param, root), param, Location::Path, errors)
+            }
+            None => report_missing(param, Location::Path, errors),
         }
     }
 }
@@ -47,24 +49,26 @@ pub fn validate_query_params(
     query_pairs: &[(String, String)],
     compiled_params: &[CompiledParam],
     root: &Value,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) {
     for param in compiled_params {
         match decode_query(query_pairs, param, root) {
             Ok(Some(values)) => {
                 for value in values {
-                    validate_value(value, param, "query", errors);
+                    validate_value(value, param, Location::Query, errors);
                 }
             }
-            Ok(None) => report_missing(param, "query", errors),
-            Err(message) => errors.push(ValidationError {
-                kind: ValidationErrorKind::InvalidParamValue,
-                message: format!(
+            Ok(None) => report_missing(param, Location::Query, errors),
+            Err(message) => errors.push(Violation::new(
+                Location::Query,
+                ErrorClass::InvalidEncoding,
+                Some("style"),
+                &param.name,
+                format!(
                     "Invalid value for query parameter '{}': {message}",
                     param.name
                 ),
-                path: format!("query.{}", param.name),
-            }),
+            )),
         }
     }
 }
@@ -74,7 +78,7 @@ pub fn validate_header_params(
     headers: &[(String, String)],
     compiled_params: &[CompiledParam],
     root: &Value,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) {
     for param in compiled_params {
         let raw = headers
@@ -84,9 +88,9 @@ pub fn validate_header_params(
         match raw {
             Some(raw) => {
                 let value = decode_simple(raw, param.explode, param.schema.as_ref(), root);
-                validate_value(value, param, "header", errors);
+                validate_value(value, param, Location::Header, errors);
             }
-            None => report_missing(param, "header", errors),
+            None => report_missing(param, Location::Header, errors),
         }
     }
 }
@@ -96,7 +100,7 @@ pub fn validate_cookie_params(
     cookies: &[(String, String)],
     compiled_params: &[CompiledParam],
     root: &Value,
-    errors: &mut Vec<ValidationError>,
+    errors: &mut Vec<Violation>,
 ) {
     for param in compiled_params {
         let raw = cookies
@@ -118,9 +122,9 @@ pub fn validate_cookie_params(
                     param.schema.as_ref(),
                     root,
                 );
-                validate_value(value, param, "cookie", errors);
+                validate_value(value, param, Location::Cookie, errors);
             }
-            None => report_missing(param, "cookie", errors),
+            None => report_missing(param, Location::Cookie, errors),
         }
     }
 }
@@ -373,13 +377,19 @@ fn object_properties<'a>(
 // Reporting
 // ---------------------------------------------------------------------------
 
-fn report_missing(param: &CompiledParam, location: &str, errors: &mut Vec<ValidationError>) {
+fn report_missing(param: &CompiledParam, location: Location, errors: &mut Vec<Violation>) {
     if param.required {
-        errors.push(ValidationError {
-            kind: ValidationErrorKind::MissingRequiredParam,
-            message: format!("Required {location} parameter '{}' is missing", param.name),
-            path: format!("{location}.{}", param.name),
-        });
+        errors.push(Violation::new(
+            location,
+            ErrorClass::MissingRequired,
+            None,
+            &param.name,
+            format!(
+                "Required {} parameter '{}' is missing",
+                location.as_str(),
+                param.name
+            ),
+        ));
     }
 }
 
@@ -387,28 +397,22 @@ fn report_missing(param: &CompiledParam, location: &str, errors: &mut Vec<Valida
 fn validate_value(
     value: Value,
     param: &CompiledParam,
-    location: &str,
-    errors: &mut Vec<ValidationError>,
+    location: Location,
+    errors: &mut Vec<Violation>,
 ) {
     let Some(validator) = &param.schema_validator else {
         return;
     };
-
-    let validation_errors: Vec<String> = validator
-        .iter_errors(&value)
-        .map(|e| e.to_string())
-        .collect();
-    if !validation_errors.is_empty() {
-        errors.push(ValidationError {
-            kind: ValidationErrorKind::InvalidParamValue,
-            message: format!(
-                "Invalid value for {location} parameter '{}': {}",
-                param.name,
-                validation_errors.join("; ")
-            ),
-            path: format!("{location}.{}", param.name),
-        });
-    }
+    errors.extend(validator.iter_errors(&value).map(|err| {
+        let mut violation = Violation::schema(location, &param.name, &err);
+        violation.message = format!(
+            "Invalid value for {} parameter '{}': {}",
+            location.as_str(),
+            param.name,
+            violation.message
+        );
+        violation
+    }));
 }
 
 #[cfg(test)]
@@ -433,7 +437,7 @@ mod tests {
         }
     }
 
-    fn query_errors(qs: &str, p: &CompiledParam) -> Vec<ValidationError> {
+    fn query_errors(qs: &str, p: &CompiledParam) -> Vec<Violation> {
         let pairs = parse_query_string(qs);
         let mut errors = Vec::new();
         validate_query_params(&pairs, std::slice::from_ref(p), &Value::Null, &mut errors);
@@ -564,18 +568,18 @@ mod tests {
         assert!(query_errors("p[a]=1&p[n][c]=true", &p).is_empty());
         assert!(!query_errors("p[a]=x", &p).is_empty());
         assert_eq!(
-            query_errors("other=1", &p)[0].kind,
-            ValidationErrorKind::MissingRequiredParam
+            query_errors("other=1", &p)[0].class,
+            ErrorClass::MissingRequired
         );
         // Sparse indexes and runaway nesting are rejected, not allocated.
         assert_eq!(
-            query_errors("p[9999]=1", &p)[0].kind,
-            ValidationErrorKind::InvalidParamValue
+            query_errors("p[9999]=1", &p)[0].class,
+            ErrorClass::InvalidEncoding
         );
         let deep = format!("p{}=1", "[x]".repeat(form::MAX_NESTING + 1));
         assert_eq!(
-            query_errors(&deep, &p)[0].kind,
-            ValidationErrorKind::InvalidParamValue
+            query_errors(&deep, &p)[0].class,
+            ErrorClass::InvalidEncoding
         );
         assert!(query_key_belongs_to("p[a]", &p, &Value::Null));
         assert!(!query_key_belongs_to("q", &p, &Value::Null));
@@ -588,7 +592,7 @@ mod tests {
         assert!(query_errors("p=3", &p).is_empty());
     }
 
-    fn path_errors(raw: &str, p: &CompiledParam) -> Vec<ValidationError> {
+    fn path_errors(raw: &str, p: &CompiledParam) -> Vec<Violation> {
         let mut errors = Vec::new();
         validate_path_params(
             &[("p", raw)],

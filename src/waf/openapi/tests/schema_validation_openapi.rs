@@ -32,7 +32,7 @@ fn nullable_keyword_openapi31_fails() {
         json!({}),
     );
     // Compare rejection, not Go's vocabulary-specific error wording.
-    assert_error_paths(validate(&spec, json!({"name": null})), &["body/name"]);
+    assert_error_paths(validate(&spec, json!({"name": null})), &["/name"]);
 }
 
 #[test]
@@ -118,14 +118,8 @@ fn circular_reference() {
         }),
     );
     assert_valid(validate(&spec, json!({"z": "", "b": {"z": ""}})));
-    assert_error_paths(
-        validate(&spec, json!({"z": 42, "b": {"z": ""}})),
-        &["body/z"],
-    );
-    assert_error_paths(
-        validate(&spec, json!({"z": "", "b": {"z": 42}})),
-        &["body/b/z"],
-    );
+    assert_error_paths(validate(&spec, json!({"z": 42, "b": {"z": ""}})), &["/z"]);
+    assert_error_paths(validate(&spec, json!({"z": "", "b": {"z": 42}})), &["/b/z"]);
 }
 
 #[test]
@@ -145,7 +139,7 @@ fn simple_circular_reference() {
     ));
     assert_error_paths(
         validate(&spec, json!({"value": "test", "next": {"value": 42}})),
-        &["body/next/value"],
+        &["/next/value"],
     );
 }
 
@@ -167,7 +161,7 @@ fn circular_reference_through_array_items() {
     ));
     assert_error_paths(
         validate(&spec, json!({"code": "root", "details": [{"code": 42}]})),
-        &["body/details/0/code"],
+        &["/details/0/code"],
     );
 }
 
@@ -186,6 +180,6 @@ fn local_recursive_reference_reports_instance_location() {
     );
     assert_error_paths(
         validate(&spec, json!({"name": 42, "next": {"name": "ok"}})),
-        &["body/name"],
+        &["/name"],
     );
 }

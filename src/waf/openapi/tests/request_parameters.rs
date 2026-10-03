@@ -9,8 +9,8 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::waf::openapi::error::{ValidationErrorKind, ValidationResult};
-use crate::waf::openapi::{CompiledSpec, Request, undeclared_query_parameters, validate_request};
+use crate::waf::openapi::error::{ErrorClass, Unmatched, ValidationResult};
+use crate::waf::openapi::{CompiledSpec, Match, Request, validate_request};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -75,31 +75,46 @@ fn run(name: &str) {
         assert!(case.expected.error_kind.is_none() && case.expected.error_path.is_none());
         return;
     }
-    let kind = match case.expected.error_kind.as_deref().unwrap() {
-        "path_not_found" => ValidationErrorKind::PathNotFound,
-        "missing_required_param" => ValidationErrorKind::MissingRequiredParam,
-        "invalid_param_value" => ValidationErrorKind::InvalidParamValue,
-        other => panic!("unrecognized expected kind: {other}"),
-    };
-    assert_eq!(
-        result.http_status(),
-        Some(kind.http_status()),
-        "{}",
-        case.source
-    );
-    let ValidationResult::Invalid(errors) = result else {
-        unreachable!()
-    };
-    assert!(!errors.is_empty());
-    for error in errors {
-        assert_eq!(error.kind, kind, "{}: {error:#?}", case.source);
-        assert_eq!(
-            Some(error.path.as_str()),
-            case.expected.error_path.as_deref(),
-            "{}: {error:#?}",
+    let kind = case.expected.error_kind.as_deref().unwrap();
+    if kind == "path_not_found" {
+        assert!(
+            matches!(result, ValidationResult::Unmatched(Unmatched::Path)),
+            "{}: {result:#?}",
             case.source
         );
-        assert!(!error.message.is_empty());
+        return;
+    }
+    assert_eq!(result.http_status(), Some(400), "{}", case.source);
+    let ValidationResult::Invalid(violations) = result else {
+        unreachable!()
+    };
+    assert!(!violations.is_empty());
+    // Upstream names the location and parameter as `query.limit`.
+    let (location, target) = case
+        .expected
+        .error_path
+        .as_deref()
+        .and_then(|p| p.split_once('.'))
+        .unwrap();
+    for v in violations {
+        match kind {
+            "missing_required_param" => assert_eq!(
+                v.class,
+                ErrorClass::MissingRequired,
+                "{}: {v:#?}",
+                case.source
+            ),
+            "invalid_param_value" => assert_ne!(
+                v.class,
+                ErrorClass::MissingRequired,
+                "{}: {v:#?}",
+                case.source
+            ),
+            other => panic!("unrecognized expected kind: {other}"),
+        }
+        assert_eq!(v.location.as_str(), location, "{}: {v:#?}", case.source);
+        assert_eq!(v.target, target, "{}: {v:#?}", case.source);
+        assert!(!v.message.is_empty());
     }
 }
 
@@ -325,12 +340,10 @@ fn undeclared(query: &str) -> Vec<String> {
         }}}
     });
     let spec = CompiledSpec::from_json(&doc.to_string()).unwrap();
-    let operation = spec
-        .match_route("/api/search")
-        .unwrap()
-        .check_method("GET")
-        .unwrap();
-    undeclared_query_parameters(&spec, operation, query)
+    let Match::Operation(operation) = spec.match_operation("GET", "/api/search") else {
+        panic!("expected a match");
+    };
+    operation.undeclared_query_parameters(query)
 }
 
 #[test]
