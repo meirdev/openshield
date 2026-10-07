@@ -206,8 +206,8 @@ fn percent_decode(path: &str) -> String {
 pub(crate) mod test_support {
     use super::super::openapi::CompiledSpec;
 
-    /// A pet store: `GET /pets?limit`, `POST /pets?dry_run` with a JSON body and
-    /// `GET /pets/{id}`, served under `/v1`.
+    /// A pet store: `GET /pets?limit`, `POST /pets?dry_run` with a JSON body
+    /// and `GET /pets/{id}`, served under `/v1`.
     pub const PETSTORE: &str = r#"
 openapi: 3.1.0
 info: {title: Pets, version: "1"}

@@ -115,7 +115,8 @@ pub fn assert_schema_invalid(result: ValidationResult) -> Vec<Violation> {
     assert_body_violations(result, is_schema_class)
 }
 
-/// The violations' targets (JSON pointers into the body) are exactly `expected`.
+/// The violations' targets (JSON pointers into the body) are exactly
+/// `expected`.
 #[track_caller]
 pub fn assert_error_paths(result: ValidationResult, expected: &[&str]) {
     let violations = assert_schema_invalid(result);

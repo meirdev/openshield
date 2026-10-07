@@ -154,7 +154,13 @@ regex_capture(http.request.uri.path, "/item/(\\d+)")[1] == "42"
 
 ### Lists
 
-Define named lists in the configuration and reference them with `$name`. IP lists accept addresses and CIDRs; string lists match exact values. The default `kind` is `ip`.
+Define named lists in the configuration and reference them with `$name`.
+
+| `kind`      | Matches when                                                                      |
+| ----------- | --------------------------------------------------------------------------------- |
+| `ip`        | the address is one of the items or inside one of the CIDRs                        |
+| `string`    | the whole value equals one of the items                                           |
+| `substring` | any item appears anywhere inside the value (Aho-Corasick, ASCII case-insensitive) |
 
 ```yaml
 lists:
@@ -164,6 +170,15 @@ lists:
   - name: blocked_ua
     kind: string
     items: ["sqlmap", "nikto"]
+  - name: scanner_ua
+    kind: substring
+    items: ["sqlmap", "nikto", "nmap"]
+```
+
+```
+ip.src in $allowed_ips
+http.user_agent in $blocked_ua
+http.user_agent in $scanner_ua
 ```
 
 ### Scores
