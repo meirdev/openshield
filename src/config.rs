@@ -62,6 +62,9 @@ pub struct Config {
     pub token_configurations: Vec<TokenConfig>,
 
     #[serde(default)]
+    pub schemas: Vec<SchemaConfig>,
+
+    #[serde(default)]
     pub rulesets: Vec<RulesetConfig>,
 }
 
@@ -73,6 +76,17 @@ pub struct TokenConfig {
     pub description: Option<String>,
     pub token_sources: Vec<String>,
     pub credentials: TokenCredentials,
+}
+
+/// An OpenAPI document that requests to `hosts` are validated against.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SchemaConfig {
+    pub name: String,
+    /// OpenAPI 3.0 or 3.1 document, JSON or YAML by extension.
+    pub file: PathBuf,
+    /// Hostnames the schema describes; empty means every host.
+    #[serde(default)]
+    pub hosts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -441,6 +455,20 @@ impl Config {
                 return Err(format!("token configuration '{}' has no keys", tc.id).into());
             }
         }
+        for schema in &self.schemas {
+            if schema.name.is_empty() {
+                return Err("schema name is required".into());
+            }
+            if self
+                .schemas
+                .iter()
+                .filter(|s| s.name == schema.name)
+                .count()
+                > 1
+            {
+                return Err(format!("duplicate schema name '{}'", schema.name).into());
+            }
+        }
         for rs in &self.rulesets {
             if rs.name.is_empty() {
                 return Err("ruleset name is required".into());
@@ -660,6 +688,28 @@ token_configurations:
           alg: ES256
         - {kty: oct, kid: hs-1, alg: HS256, k: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}
 "#;
+
+    #[test]
+    fn schemas_parse_and_need_unique_names() {
+        let cfg = parse(
+            "listen: a\nupstream: b\nschemas:\n  - {name: pets, file: ./pets.yaml, hosts: \
+             [api.example.com]}\n  - {name: all, file: all.json}\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.schemas[0].hosts, ["api.example.com"]);
+        assert_eq!(cfg.schemas[1].file, PathBuf::from("all.json"));
+        assert!(cfg.schemas[1].hosts.is_empty());
+
+        let err = parse(
+            "listen: a\nupstream: b\nschemas:\n  - {name: pets, file: a.yaml}\n  - {name: pets, \
+             file: b.yaml}\n",
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("duplicate schema name 'pets'"),
+            "{err}"
+        );
+    }
 
     #[test]
     fn token_configuration_parses_jwks() {

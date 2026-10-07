@@ -24,6 +24,7 @@ use crate::waf::engine::{Engine, Phase, RuleAction};
 use crate::waf::jwt::JwtValidator;
 use crate::waf::lists::{BytesListMatcher, IpListMatcher};
 use crate::waf::populate;
+use crate::waf::schema::SchemaValidator;
 
 pub struct ReverseProxyHandler {
     pub detection_only: bool,
@@ -34,6 +35,7 @@ pub struct ReverseProxyHandler {
     pub scheme: Arc<wirefilter_engine::Scheme>,
     pub engine: Engine,
     pub jwt: JwtValidator,
+    pub schemas: SchemaValidator,
     pub max_request_body_buffer: usize,
     pub request_body_limit_action: BodyLimitAction,
     pub inspect_response_body: bool,
@@ -114,6 +116,15 @@ async fn finalize_request_body(
         ctx.req_body.truncated,
         content_type.as_deref(),
     );
+    if let Some(request) = &ctx.schema_request {
+        let violations = handler.schemas.check_body(
+            request,
+            content_type.as_deref(),
+            &ctx.req_body.buf,
+            ctx.req_body.truncated,
+        );
+        populate::schema_body_fields(&mut ctx.exec_ctx, &handler.scheme, &violations);
+    }
 
     if let Some(tx) = ctx.multipart_tx.take() {
         drop(tx);
@@ -426,6 +437,7 @@ impl ProxyHttp for ReverseProxyHandler {
                 }
                 ctx
             },
+            schema_request: None,
             req_body: BodyBuffer::new(self.max_request_body_buffer),
             multipart_tx: None,
             multipart_task: None,
@@ -463,6 +475,10 @@ impl ProxyHttp for ReverseProxyHandler {
         if !self.jwt.is_empty() {
             let outcomes = self.jwt.evaluate(&ctx.exec_ctx);
             populate::jwt_fields(&mut ctx.exec_ctx, &self.scheme, &outcomes);
+        }
+        if let Some((request, outcome)) = self.schemas.check_request(&req_data) {
+            populate::schema_fields(&mut ctx.exec_ctx, &self.scheme, &outcome);
+            ctx.schema_request = Some(request);
         }
 
         if let Some(ct) = session

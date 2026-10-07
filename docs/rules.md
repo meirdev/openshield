@@ -290,7 +290,7 @@ The argument is the `id` of a token configuration. See [JWT validation](jwt.md).
 
 ## Fields
 
-Fields become available as the request moves through the phases. GeoIP fields require configured databases; body fields require body inspection; JWT claim fields require a token configuration. A field may be absent when the corresponding data is unavailable.
+Fields become available as the request moves through the phases. GeoIP fields require configured databases; body fields require body inspection; JWT claim fields require a token configuration; schema validation fields require a schema. A field may be absent when the corresponding data is unavailable.
 
 ### IP and GeoIP
 
@@ -309,6 +309,12 @@ Fields become available as the request moves through the phases. GeoIP fields re
 `http.request.jwt.claims.aud`, `http.request.jwt.claims.iss`, `http.request.jwt.claims.jti`, `http.request.jwt.claims.sub`, `http.request.jwt.claims.iat.sec`, `http.request.jwt.claims.nbf.sec`
 
 Each is a map keyed by token configuration `id` and also has `.names` and `.values` arrays. See [JWT validation](jwt.md#claims).
+
+### Schema validation
+
+`schema_validation.schema`, `schema_validation.operation.matched`, `schema_validation.operation.template`, `schema_validation.violated`, `schema_validation.path.violated_parameters`, `schema_validation.query.violated_parameters`, `schema_validation.headers.violated_parameters`, `schema_validation.cookies.violated_parameters`, `schema_validation.body.violated_parameters`, `schema_validation.query.undeclared_parameters`, `schema_validation.violation_details.location`, `schema_validation.violation_details.error_class`, `schema_validation.violation_details.error_detail`, `schema_validation.violation_details.target`
+
+Set when a configured schema covers the request host. See [schema validation](schema-validation.md).
 
 ### Request body
 

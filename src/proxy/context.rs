@@ -6,6 +6,7 @@ use wirefilter_engine::ExecutionContext;
 
 use super::metrics::ACTIVE_CONNECTIONS;
 use crate::geoip::GeoIpLookup;
+use crate::waf::schema::SchemaRequest;
 
 pub fn next_request_id() -> String {
     uuid::Uuid::new_v4().to_string()
@@ -60,6 +61,8 @@ pub struct RequestCtx {
     pub start: Instant,
     pub geo: Option<GeoIpLookup>,
     pub exec_ctx: ExecutionContext<'static>,
+    /// The operation the request matched, for validating its body later.
+    pub schema_request: Option<SchemaRequest>,
     pub req_body: BodyBuffer,
     pub res_body: BodyBuffer,
     pub multipart_tx: Option<mpsc::Sender<Result<bytes::Bytes, std::convert::Infallible>>>,

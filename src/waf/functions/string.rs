@@ -163,7 +163,10 @@ mod tests {
 
     #[test]
     fn replace_comments_replaces_each_with_one_space() {
-        assert_eq!(replace_comments(b"UN/**/ION/* x */SELECT"), b"UN ION SELECT");
+        assert_eq!(
+            replace_comments(b"UN/**/ION/* x */SELECT"),
+            b"UN ION SELECT"
+        );
         assert_eq!(replace_comments(b"a/* 1 *//* 2 */b"), b"a  b");
         assert_eq!(replace_comments(b"a/* line\nbreak */b"), b"a b");
         assert_eq!(replace_comments(b"no comments"), b"no comments");
