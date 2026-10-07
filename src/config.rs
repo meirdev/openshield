@@ -168,7 +168,6 @@ pub struct MetricsConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ListConfig {
     pub name: String,
-    #[serde(default = "default_list_kind")]
     pub kind: String,
     #[serde(default)]
     pub items: Vec<String>,
@@ -399,9 +398,6 @@ fn default_challenge_cookie_name() -> String {
 }
 fn default_challenge_path() -> String {
     "/__openshield/challenge".into()
-}
-fn default_list_kind() -> String {
-    "ip".into()
 }
 fn default_phase() -> Phase {
     Phase::RequestHeaders
