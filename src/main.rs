@@ -129,7 +129,13 @@ fn main() {
     };
 
     // Lists
-    let (ip_lists, bytes_lists) = waf::lists::build_from_config(&config.lists);
+    let (ip_lists, bytes_lists) = match waf::lists::build_from_config(&config.lists) {
+        Ok(lists) => lists,
+        Err(e) => {
+            error!("Failed to load lists: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     // Logger
     let logger = Arc::new(logging::Logger::new(&config.logging));

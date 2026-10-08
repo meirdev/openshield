@@ -154,7 +154,7 @@ regex_capture(http.request.uri.path, "/item/(\\d+)")[1] == "42"
 
 ### Lists
 
-Define named lists in the configuration and reference them with `$name`.
+Define named lists in the configuration and reference them with `$name`. Each list needs a unique `name` and a `kind`:
 
 | `kind`      | Matches when                                                                      |
 | ----------- | --------------------------------------------------------------------------------- |
