@@ -84,7 +84,8 @@ pub struct SchemaConfig {
     pub name: String,
     /// OpenAPI 3.0 or 3.1 document, JSON or YAML by extension.
     pub file: PathBuf,
-    /// Hostnames the schema describes; empty means every host.
+    /// Bare hostnames the schema describes, without port; empty means every
+    /// host.
     #[serde(default)]
     pub hosts: Vec<String>,
 }
@@ -475,6 +476,18 @@ impl Config {
             if schema.name.is_empty() {
                 return Err("schema name is required".into());
             }
+            for host in &schema.hosts {
+                let bare = !host.is_empty()
+                    && !host.ends_with('.')
+                    && !host.contains([':', '/', '[', ' ', '\t']);
+                if !bare {
+                    return Err(format!(
+                        "schema '{}': host '{host}' must be a bare hostname without port",
+                        schema.name
+                    )
+                    .into());
+                }
+            }
             if self
                 .schemas
                 .iter()
@@ -753,6 +766,17 @@ token_configurations:
             err.to_string().contains("duplicate schema name 'pets'"),
             "{err}"
         );
+
+        for host in ["api.example.com:8443", "api.example.com.", "", "https://x"] {
+            let err = parse(&format!(
+                "listen: a\nupstream: b\nschemas:\n  - {{name: pets, file: a.yaml, hosts: ['{host}']}}\n"
+            ))
+            .unwrap_err();
+            assert!(
+                err.to_string().contains("must be a bare hostname"),
+                "{host}: {err}"
+            );
+        }
     }
 
     #[test]

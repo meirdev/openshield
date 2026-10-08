@@ -41,7 +41,7 @@ pub struct SchemaOutcome<'a> {
 pub struct SchemaRequest {
     schema: usize,
     method: String,
-    path: String,
+    template: String,
 }
 
 impl SchemaValidator {
@@ -79,45 +79,53 @@ impl SchemaValidator {
         self.schemas.is_empty()
     }
 
-    /// Match the request to an operation and validate everything but the
-    /// body. `None` when no schema applies to the request host.
-    pub fn check_request(&self, req: &RequestData) -> Option<(SchemaRequest, SchemaOutcome<'_>)> {
-        let host = host_name(&req.host);
-        let (index, schema) = self
-            .schemas
-            .iter()
-            .enumerate()
-            .find(|(_, s)| s.hosts.is_empty() || s.hosts.contains(&host))?;
+    /// The schema for `host`: one listing it, else one without hosts.
+    fn schema_for(&self, host: &str) -> Option<(usize, &Schema)> {
+        let schemas = self.schemas.iter().enumerate();
+        schemas
+            .clone()
+            .find(|(_, s)| s.hosts.iter().any(|h| h == host))
+            .or_else(|| schemas.clone().find(|(_, s)| s.hosts.is_empty()))
+    }
 
-        let request = SchemaRequest {
-            schema: index,
-            method: req.method.clone(),
-            path: percent_decode(&req.path),
-        };
-        let outcome = match schema.spec.match_operation(&request.method, &request.path) {
+    /// Match the request to an operation and validate everything but the
+    /// body. `None` when no schema applies to the request host; the
+    /// [`SchemaRequest`] is present when an operation matched.
+    pub fn check_request(
+        &self,
+        req: &RequestData,
+    ) -> Option<(Option<SchemaRequest>, SchemaOutcome<'_>)> {
+        let (index, schema) = self.schema_for(&host_name(&req.host))?;
+        match schema.spec.match_operation(&req.method, &req.path) {
             Match::Operation(op) => {
                 let query = (!req.query.is_empty()).then_some(req.query.as_str());
-                SchemaOutcome {
+                let request = SchemaRequest {
+                    schema: index,
+                    method: req.method.clone(),
+                    template: op.template.to_string(),
+                };
+                let outcome = SchemaOutcome {
                     schema: &schema.name,
                     operation: Ok(op.template),
                     violations: op.validate_parameters(query, &req.headers),
                     undeclared_query_parameters: op.undeclared_query_parameters(&req.query),
-                }
+                };
+                Some((Some(request), outcome))
             }
             Match::Unmatched(unmatched) => {
                 debug!(
                     "schema '{}': no operation for {} {}: {:?}",
-                    schema.name, request.method, request.path, unmatched
+                    schema.name, req.method, req.path, unmatched
                 );
-                SchemaOutcome {
+                let outcome = SchemaOutcome {
                     schema: &schema.name,
                     operation: Err(unmatched),
                     violations: Vec::new(),
                     undeclared_query_parameters: Vec::new(),
-                }
+                };
+                Some((None, outcome))
             }
-        };
-        Some((request, outcome))
+        }
     }
 
     /// Validate the body of a request matched by [`Self::check_request`].
@@ -131,10 +139,10 @@ impl SchemaValidator {
         truncated: bool,
     ) -> Vec<Violation> {
         let spec = &self.schemas[request.schema].spec;
-        let Match::Operation(op) = spec.match_operation(&request.method, &request.path) else {
+        let Some(operation) = spec.operation(&request.template, &request.method) else {
             return Vec::new();
         };
-        if truncated {
+        if truncated && operation.request_body.is_some() {
             return vec![Violation::new(
                 Location::Body,
                 ErrorClass::BodySize,
@@ -143,7 +151,7 @@ impl SchemaValidator {
                 "Request body exceeds the inspection buffer",
             )];
         }
-        op.validate_body(content_type, (!body.is_empty()).then_some(body))
+        spec.validate_body(operation, content_type, (!body.is_empty()).then_some(body))
     }
 }
 
@@ -171,35 +179,6 @@ fn host_name(host: &str) -> String {
         },
     };
     name.to_ascii_lowercase()
-}
-
-/// Decode `%XX` escapes; invalid escapes and non-UTF-8 bytes are kept as
-/// written so the path still fails to match rather than panicking.
-fn percent_decode(path: &str) -> String {
-    if !path.contains('%') {
-        return path.to_string();
-    }
-    let bytes = path.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let decoded = (bytes[i] == b'%')
-            .then(|| bytes.get(i + 1..i + 3))
-            .flatten()
-            .and_then(|hex| std::str::from_utf8(hex).ok())
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match decoded {
-            Some(byte) => {
-                out.push(byte);
-                i += 3;
-            }
-            None => {
-                out.push(bytes[i]);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 #[cfg(test)]
@@ -251,10 +230,11 @@ mod tests {
     use super::*;
     use crate::waf::populate::test_support::empty_request;
 
+    /// The catch-all comes first on purpose: a host match must still win.
     fn validator() -> SchemaValidator {
         SchemaValidator::from_specs(vec![
-            ("pets", &["api.example.com"], petstore()),
             ("any", &[], petstore()),
+            ("pets", &["api.example.com"], petstore()),
         ])
     }
 
@@ -289,6 +269,13 @@ mod tests {
         assert_eq!(
             outcome.schema, "any",
             "a schema without hosts takes the rest"
+        );
+        let (body_step, _) = v
+            .check_request(&request("api.example.com", "GET", "/v1/pets", ""))
+            .unwrap();
+        assert!(
+            body_step.is_some(),
+            "a match yields a request for the body step"
         );
 
         let only_pets =
@@ -325,10 +312,11 @@ mod tests {
     #[test]
     fn unmatched_path_and_method() {
         let v = validator();
-        let (_, outcome) = v
+        let (body_step, outcome) = v
             .check_request(&request("api.example.com", "GET", "/v1/owners", ""))
             .unwrap();
         assert_eq!(outcome.operation, Err(Unmatched::Path));
+        assert!(body_step.is_none(), "nothing to validate the body against");
         let (_, outcome) = v
             .check_request(&request("api.example.com", "DELETE", "/v1/pets", ""))
             .unwrap();
@@ -353,7 +341,6 @@ mod tests {
             .unwrap();
         assert_eq!(outcome.operation, Ok("/pets/{id}"));
         assert!(outcome.violations.is_empty());
-        assert_eq!(percent_decode("/a%2Fb%zz%4"), "/a/b%zz%4");
     }
 
     #[test]
@@ -362,6 +349,7 @@ mod tests {
         let (request, _) = v
             .check_request(&request("api.example.com", "POST", "/v1/pets", ""))
             .unwrap();
+        let request = request.unwrap();
         let json = Some("application/json");
 
         assert!(
@@ -385,6 +373,12 @@ mod tests {
         let violations = v.check_body(&request, json, b"{\"name\": \"Rex\"", true);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].class, ErrorClass::BodySize);
+
+        // An operation without a request body has nothing to say about one.
+        let (get, _) = v
+            .check_request(&self::request("api.example.com", "GET", "/v1/pets/1", ""))
+            .unwrap();
+        assert!(v.check_body(&get.unwrap(), json, b"{}", true).is_empty());
     }
 
     #[test]

@@ -463,7 +463,7 @@ impl ProxyHttp for ReverseProxyHandler {
         }
         if let Some((request, outcome)) = self.schemas.check_request(&req_data) {
             populate::schema_fields(&mut ctx.exec_ctx, &self.scheme, &outcome);
-            ctx.schema_request = Some(request);
+            ctx.schema_request = request;
         }
 
         if let Some(ct) = session

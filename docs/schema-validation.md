@@ -36,15 +36,15 @@ rulesets:
 | ------- | -------- | --------------------------------------------------------------------- |
 | `name`  | Required | Name reported in `schema_validation.schema`; unique                   |
 | `file`  | Required | OpenAPI document, JSON or YAML by file extension                      |
-| `hosts` | `[]`     | Hostnames the schema describes; empty means every host                |
+| `hosts` | `[]`     | Bare hostnames the schema describes, without port; empty means every host |
 
-A request is checked against the first schema whose `hosts` include its `Host` (without port, case-insensitive), or the first schema without `hosts`. Requests to a host that no schema covers are not checked and leave every `schema_validation` field unset.
+A request is checked against the schema whose `hosts` include its `Host` (compared without port, case-insensitively), or else against the first schema without `hosts`. Requests to a host that no schema covers are not checked and leave every `schema_validation` field unset.
 
 The document's `servers` URLs decide the base path: with `servers: [{url: https://api.example.com/v1}]`, operations are matched under `/v1`. Server variables use their `default`. OpenShield refuses to start when a document does not compile; check with `--test`.
 
 ## What is validated
 
-An operation is matched by method and path, with `HEAD` falling back to `GET`. For a matched operation, OpenShield checks:
+An operation is matched by method and path, with `HEAD` falling back to `GET`. Path segments are percent-decoded individually, so an encoded slash (`%2F`) stays inside its segment. For a matched operation, OpenShield checks:
 
 - **Parameters:** path, query, header and cookie parameters, with their OpenAPI `style` and `explode` serialization. `Accept`, `Content-Type` and `Authorization` header parameters are ignored, as the specification requires.
 - **Content-Type:** when the operation declares a request body and the request has one or the body is required.
@@ -73,7 +73,7 @@ Parameters are validated when the request headers arrive, so their result is ava
 | `schema_validation.violation_details.error_detail`  | `String`        | What was violated, such as `expected:integer` or `pattern_no_match`   |
 | `schema_validation.violation_details.target`        | `String`        | Parameter name or JSON pointer of the first violation                 |
 
-The fields exist once a schema applies to the host. `violated`, `operation.*` and the parameter arrays are set with the request headers; `body.violated_parameters` is set after body inspection. `violation_details` describe the first violation found, parameters before body.
+The fields exist once a schema applies to the host. `violated`, `operation.*` and the parameter arrays are set with the request headers; `body.violated_parameters` is set after body inspection, or empty when no operation matched. `violation_details` describe the first violation found, parameters before body.
 
 Error classes:
 

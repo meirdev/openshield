@@ -25,88 +25,56 @@ pub use error::{ErrorClass, Location, Unmatched, Violation};
 pub use spec::{CompiledOperation, CompiledSpec};
 
 /// The outcome of looking up a request's operation.
-pub enum Match<'s, 'p> {
-    Operation(MatchedOperation<'s, 'p>),
+pub enum Match<'s> {
+    Operation(MatchedOperation<'s>),
     Unmatched(Unmatched),
 }
 
 /// An operation matched to a request path, ready to validate the request.
-pub struct MatchedOperation<'s, 'p> {
+pub struct MatchedOperation<'s> {
     spec: &'s CompiledSpec,
     /// The OpenAPI path template that matched.
     pub template: &'s str,
     /// Path parameters captured from the request path, in template order.
-    pub path_params: Vec<(&'s str, &'p str)>,
+    /// A `/` inside a value stays encoded as `%2F`.
+    pub path_params: Vec<(&'s str, String)>,
     pub operation: &'s CompiledOperation,
 }
 
 impl CompiledSpec {
-    /// Find the operation for `method` and `path`. `path` is percent-decoded
-    /// and carries no query string.
-    pub fn match_operation<'s, 'p>(&'s self, method: &str, path: &'p str) -> Match<'s, 'p> {
-        let Some(route) = self.match_route(path) else {
+    /// Find the operation for `method` and `path`. `path` is the request
+    /// path as sent, percent-encoded and without the query string; each
+    /// segment is decoded before matching.
+    pub fn match_operation(&self, method: &str, path: &str) -> Match<'_> {
+        let decoded = decode_path(path);
+        let Some(route) = self.match_route(&decoded) else {
             return Match::Unmatched(Unmatched::Path);
         };
         match route.check_method(method) {
             Ok(operation) => Match::Operation(MatchedOperation {
                 spec: self,
                 template: route.template,
-                path_params: route.params,
+                path_params: route
+                    .params
+                    .iter()
+                    .map(|(name, value)| (*name, value.to_string()))
+                    .collect(),
                 operation,
             }),
             Err(unmatched) => Match::Unmatched(unmatched),
         }
     }
-}
 
-impl MatchedOperation<'_, '_> {
-    /// Check the path, query, header and cookie parameters. Header names are
-    /// matched case-insensitively; cookies are read from `Cookie` headers.
-    pub fn validate_parameters(
-        &self,
-        query: Option<&str>,
-        headers: &[(String, String)],
-    ) -> Vec<Violation> {
-        let root = self.spec.document();
-        let op = self.operation;
-        let mut violations = Vec::new();
-
-        params::validate_path_params(&self.path_params, &op.path_params, root, &mut violations);
-
-        let query_pairs = query.map(params::parse_query_string).unwrap_or_default();
-        params::validate_query_params(&query_pairs, &op.query_params, root, &mut violations);
-
-        params::validate_header_params(headers, &op.header_params, root, &mut violations);
-
-        let cookie_pairs = extract_cookies(headers);
-        params::validate_cookie_params(&cookie_pairs, &op.cookie_params, root, &mut violations);
-
-        violations
-    }
-
-    /// Query parameter names in `query` that the operation does not declare.
-    pub fn undeclared_query_parameters(&self, query: &str) -> Vec<String> {
-        let root = self.spec.document();
-        let mut names: Vec<String> = params::parse_query_string(query)
-            .into_iter()
-            .map(|(key, _)| key)
-            .filter(|key| {
-                !self
-                    .operation
-                    .query_params
-                    .iter()
-                    .any(|p| params::query_key_belongs_to(key, p, root))
-            })
-            .collect();
-        names.dedup();
-        names
-    }
-
-    /// Check the `Content-Type` and the body against the operation's request
+    /// Check the `Content-Type` and the body against `operation`'s request
     /// body, if it declares one. `body` is `None` when the request has none.
-    pub fn validate_body(&self, content_type: Option<&str>, body: Option<&[u8]>) -> Vec<Violation> {
+    pub fn validate_body(
+        &self,
+        operation: &CompiledOperation,
+        content_type: Option<&str>,
+        body: Option<&[u8]>,
+    ) -> Vec<Violation> {
         let mut violations = Vec::new();
-        let Some(req_body) = &self.operation.request_body else {
+        let Some(req_body) = &operation.request_body else {
             return violations;
         };
 
@@ -134,10 +102,99 @@ impl MatchedOperation<'_, '_> {
             req_body.required,
             media,
             kind,
-            self.spec.document(),
+            self.document(),
             &mut violations,
         );
         violations
+    }
+}
+
+/// Percent-decode each path segment on its own, so an encoded `/` (`%2F`)
+/// does not become a segment separator. Invalid escapes are kept as written.
+fn decode_path(path: &str) -> String {
+    if !path.contains('%') {
+        return path.to_string();
+    }
+    let mut out = Vec::with_capacity(path.len());
+    for (i, segment) in path.split('/').enumerate() {
+        if i > 0 {
+            out.push(b'/');
+        }
+        let bytes = segment.as_bytes();
+        let mut j = 0;
+        while j < bytes.len() {
+            let escape = (bytes[j] == b'%')
+                .then(|| bytes.get(j + 1..j + 3))
+                .flatten()
+                .and_then(|hex| std::str::from_utf8(hex).ok())
+                .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+            match escape {
+                Some(b'/') => out.extend_from_slice(b"%2F"),
+                Some(byte) => out.push(byte),
+                None => {
+                    out.push(bytes[j]);
+                    j += 1;
+                    continue;
+                }
+            }
+            j += 3;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+impl MatchedOperation<'_> {
+    /// Check the path, query, header and cookie parameters. Header names are
+    /// matched case-insensitively; cookies are read from `Cookie` headers.
+    pub fn validate_parameters(
+        &self,
+        query: Option<&str>,
+        headers: &[(String, String)],
+    ) -> Vec<Violation> {
+        let root = self.spec.document();
+        let op = self.operation;
+        let mut violations = Vec::new();
+
+        let captured: Vec<(&str, &str)> = self
+            .path_params
+            .iter()
+            .map(|(name, value)| (*name, value.as_str()))
+            .collect();
+        params::validate_path_params(&captured, &op.path_params, root, &mut violations);
+
+        let query_pairs = query.map(params::parse_query_string).unwrap_or_default();
+        params::validate_query_params(&query_pairs, &op.query_params, root, &mut violations);
+
+        params::validate_header_params(headers, &op.header_params, root, &mut violations);
+
+        let cookie_pairs = extract_cookies(headers);
+        params::validate_cookie_params(&cookie_pairs, &op.cookie_params, root, &mut violations);
+
+        violations
+    }
+
+    /// Query parameter names in `query` that the operation does not declare.
+    pub fn undeclared_query_parameters(&self, query: &str) -> Vec<String> {
+        let root = self.spec.document();
+        let mut seen = std::collections::HashSet::new();
+        params::parse_query_string(query)
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| {
+                !self
+                    .operation
+                    .query_params
+                    .iter()
+                    .any(|p| params::query_key_belongs_to(key, p, root))
+            })
+            .filter(|key| seen.insert(key.clone()))
+            .collect()
+    }
+
+    /// Check the `Content-Type` and the body; see [`CompiledSpec::validate_body`].
+    #[cfg(test)]
+    pub fn validate_body(&self, content_type: Option<&str>, body: Option<&[u8]>) -> Vec<Violation> {
+        self.spec.validate_body(self.operation, content_type, body)
     }
 }
 
@@ -175,17 +232,14 @@ fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
-/// Extract cookies from the Cookie header into key-value pairs.
+/// Extract cookies from the Cookie headers into name-value pairs, parsed
+/// the same way as the `http.request.cookies` field.
 fn extract_cookies(headers: &[(String, String)]) -> Vec<(String, String)> {
     headers
         .iter()
         .filter(|(k, _)| k.eq_ignore_ascii_case("cookie"))
-        .flat_map(|(_, v)| {
-            v.split(';').map(|cookie| {
-                let (name, value) = cookie.trim().split_once('=').unwrap_or((cookie.trim(), ""));
-                (name.to_string(), value.to_string())
-            })
-        })
+        .flat_map(|(_, v)| cookie::Cookie::split_parse(v).filter_map(Result::ok))
+        .map(|c| (c.name().to_string(), c.value().to_string()))
         .collect()
 }
 
@@ -385,7 +439,7 @@ mod unit_tests {
         let Match::Operation(op) = spec.match_operation("GET", "/users/7") else {
             panic!("expected a match");
         };
-        assert_eq!(op.path_params, [("id", "7")]);
+        assert_eq!(op.path_params, [("id", "7".to_string())]);
         assert!(
             op.validate_body(None, None).is_empty(),
             "GET declares no body"
@@ -441,14 +495,56 @@ mod unit_tests {
 
     #[test]
     fn cookies_are_parsed_from_the_header() {
-        let headers = [("Cookie".to_string(), "a=1; b=x=y; c".to_string())];
+        let headers = [
+            ("Cookie".to_string(), "a=1; b=x=y; c".to_string()),
+            ("cookie".to_string(), "d=\"quoted\"; =nameless".to_string()),
+        ];
         assert_eq!(
             extract_cookies(&headers),
             vec![
                 ("a".to_string(), "1".to_string()),
                 ("b".to_string(), "x=y".to_string()),
-                ("c".to_string(), String::new()),
+                ("d".to_string(), "\"quoted\"".to_string()),
             ]
+        );
+    }
+
+    #[test]
+    fn path_segments_are_decoded_individually() {
+        assert_eq!(decode_path("/a%20b/%34%32"), "/a b/42");
+        assert_eq!(decode_path("/pets/4%2F2/x"), "/pets/4%2F2/x");
+        assert_eq!(decode_path("/a%2fb"), "/a%2Fb");
+        assert_eq!(decode_path("/a%zz/%4"), "/a%zz/%4");
+        assert_eq!(decode_path("/plain"), "/plain");
+
+        let spec = spec();
+        let Match::Operation(op) = spec.match_operation("GET", "/users/%34%32") else {
+            panic!("expected a match");
+        };
+        assert_eq!(op.path_params, [("id", "42".to_string())]);
+        assert!(op.validate_parameters(None, &[]).is_empty());
+
+        // An encoded slash stays inside the segment and is not an integer.
+        let Match::Operation(op) = spec.match_operation("GET", "/users/4%2F2") else {
+            panic!("expected a match");
+        };
+        assert_eq!(op.path_params, [("id", "4%2F2".to_string())]);
+        assert_eq!(op.validate_parameters(None, &[]).len(), 1);
+        assert!(matches!(
+            spec.match_operation("GET", "/users%2F42"),
+            Match::Unmatched(Unmatched::Path)
+        ));
+    }
+
+    #[test]
+    fn undeclared_query_parameters_are_unique() {
+        let spec = spec();
+        let Match::Operation(op) = spec.match_operation("GET", "/users") else {
+            panic!("expected a match");
+        };
+        assert_eq!(
+            op.undeclared_query_parameters("x=1&y=2&x=3&page=1"),
+            ["x", "y"]
         );
     }
 }
