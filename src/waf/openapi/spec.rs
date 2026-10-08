@@ -20,8 +20,11 @@ pub struct CompiledSpec {
     /// Path prefixes from `servers`, longest first. Request paths must start
     /// with one of them; empty when the servers declare no path.
     base_paths: Vec<String>,
-    /// Radix-tree router from request path to the route's compiled operations.
-    router: Router<CompiledRoute>,
+    routes: Vec<CompiledRoute>,
+    /// Radix-tree router from request path to an index in `routes`.
+    router: Router<usize>,
+    /// Normalized path template to an index in `routes`.
+    by_template: HashMap<String, usize>,
     /// The OpenAPI document after dialect rewrites, used to follow `$ref`s at
     /// request time (e.g. to learn a parameter's declared type).
     document: Arc<Value>,
@@ -39,7 +42,9 @@ impl Default for CompiledSpec {
     fn default() -> Self {
         Self {
             base_paths: Vec::new(),
+            routes: Vec::new(),
             router: Router::new(),
+            by_template: HashMap::new(),
             document: Arc::new(Value::Null),
         }
     }
@@ -122,7 +127,7 @@ pub struct CompiledParam {
 
 pub struct CompiledRequestBody {
     pub required: bool,
-    /// Media types accepted by this body, in spec order.
+    /// Media types accepted by this body, sorted by media type.
     pub content: Vec<CompiledMediaType>,
 }
 
@@ -132,14 +137,21 @@ impl CompiledRequestBody {
         self.content.iter().map(|m| &m.media_type)
     }
 
-    /// Find the first declared media type that accepts `actual`.
-    ///
-    /// Wildcards in the spec (`application/*`, `*/*`) are honoured and the
-    /// comparison is case-insensitive.
+    /// Find the most specific declared media type that accepts `actual`:
+    /// an exact type before `type/*` before `*/*`. The comparison is
+    /// case-insensitive.
     pub fn find_media_type(&self, actual: &Mime) -> Option<&CompiledMediaType> {
         self.content
             .iter()
-            .find(|m| media_type_matches(&m.media_type, actual))
+            .filter(|m| media_type_matches(&m.media_type, actual))
+            .max_by_key(|m| {
+                let star = |name: mime::Name<'_>| name == mime::STAR;
+                match (star(m.media_type.type_()), star(m.media_type.subtype())) {
+                    (false, false) => 2,
+                    (false, true) => 1,
+                    _ => 0,
+                }
+            })
     }
 }
 
@@ -165,26 +177,32 @@ pub struct MatchedRoute<'s, 'p> {
     route: &'s CompiledRoute,
 }
 
-impl<'s> MatchedRoute<'s, '_> {
+impl CompiledRoute {
     /// Look up the operation for an HTTP method on this route.
     ///
     /// A HEAD request falls back to the GET operation when the spec does not
     /// declare HEAD, since servers answer HEAD from the GET handler.
-    pub fn check_method(&self, method: &str) -> Result<&'s CompiledOperation, Unmatched> {
+    pub fn operation(&self, method: &str) -> Result<&CompiledOperation, Unmatched> {
         let method_upper = method.to_ascii_uppercase();
-        self.route
-            .operations
+        self.operations
             .get(&method_upper)
             .or_else(|| {
                 (method_upper == "HEAD")
-                    .then(|| self.route.operations.get("GET"))
+                    .then(|| self.operations.get("GET"))
                     .flatten()
             })
             .ok_or_else(|| {
-                let mut allowed: Vec<String> = self.route.operations.keys().cloned().collect();
+                let mut allowed: Vec<String> = self.operations.keys().cloned().collect();
                 allowed.sort_unstable();
                 Unmatched::Method { allowed }
             })
+    }
+}
+
+impl<'s> MatchedRoute<'s, '_> {
+    /// Look up the operation for an HTTP method on this route.
+    pub fn check_method(&self, method: &str) -> Result<&'s CompiledOperation, Unmatched> {
+        self.route.operation(method)
     }
 }
 
@@ -227,11 +245,19 @@ impl CompiledSpec {
             })?
         };
         let m = self.router.at(normalize_path(relative)).ok()?;
+        let route = &self.routes[*m.value];
         Some(MatchedRoute {
-            template: m.value.template.as_str(),
+            template: route.template.as_str(),
             params: m.params.iter().collect(),
-            route: m.value,
+            route,
         })
+    }
+
+    /// The operation declared for `method` on the path `template`, as
+    /// returned in [`MatchedRoute::template`].
+    pub fn operation(&self, template: &str, method: &str) -> Option<&CompiledOperation> {
+        let route = &self.routes[*self.by_template.get(normalize_path(template))?];
+        route.operation(method).ok()
     }
 }
 
@@ -408,7 +434,9 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
     let Some((paths_pointer, paths)) = document.child(&root_pointer, root, "paths") else {
         return Ok(CompiledSpec {
             base_paths,
+            routes: Vec::new(),
             router: Router::new(),
+            by_template: HashMap::new(),
             document: document.root,
         });
     };
@@ -503,16 +531,24 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
     }
 
     let mut router = Router::new();
-    for (normalized, route) in routes {
-        let template = route.template.clone();
-        router
-            .insert(normalized, route)
-            .map_err(|e| SpecError::PathTemplate(template, e.to_string()))?;
-    }
+    let mut by_template = HashMap::new();
+    let routes: Vec<CompiledRoute> = routes
+        .into_iter()
+        .enumerate()
+        .map(|(index, (normalized, route))| {
+            router
+                .insert(normalized.clone(), index)
+                .map_err(|e| SpecError::PathTemplate(route.template.clone(), e.to_string()))?;
+            by_template.insert(normalized, index);
+            Ok(route)
+        })
+        .collect::<Result<_, SpecError>>()?;
 
     Ok(CompiledSpec {
         base_paths,
+        routes,
         router,
+        by_template,
         document: document.root,
     })
 }
@@ -1037,5 +1073,31 @@ paths:
                 .contains("server variable 'v' has no default"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn operation_by_template_and_most_specific_media_type() {
+        let json = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {"/pets/{id}": {"post": {
+            "requestBody": {"content": {
+                "*/*": {},
+                "application/*": {},
+                "application/json": {"schema": {"type": "object", "required": ["name"]}}
+            }},
+            "responses": {"200": {"description": "ok"}}}}}}"#;
+        let spec = CompiledSpec::from_json(json).unwrap();
+        let op = spec.operation("/pets/{id}", "post").unwrap();
+        assert!(spec.operation("/pets/{id}", "DELETE").is_none());
+        assert!(spec.operation("/pets", "POST").is_none());
+
+        let body = op.request_body.as_ref().unwrap();
+        let pick = |ct: &str| {
+            body.find_media_type(&ct.parse().unwrap())
+                .unwrap()
+                .media_type
+                .to_string()
+        };
+        assert_eq!(pick("application/json"), "application/json");
+        assert_eq!(pick("application/xml"), "application/*");
+        assert_eq!(pick("text/plain"), "*/*");
     }
 }

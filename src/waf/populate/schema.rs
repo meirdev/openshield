@@ -66,6 +66,22 @@ pub fn schema_fields(
             false
         );
         set_field!(ctx, scheme, &format!("{PREFIX}.violated"), Bool, false);
+        for (_, segment) in LOCATIONS {
+            set_field!(
+                ctx,
+                scheme,
+                &format!("{PREFIX}.{segment}.violated_parameters"),
+                Arr,
+                Vec::new()
+            );
+        }
+        set_field!(
+            ctx,
+            scheme,
+            &format!("{PREFIX}.query.undeclared_parameters"),
+            Arr,
+            Vec::new()
+        );
         return;
     };
     set_field!(
@@ -178,7 +194,7 @@ mod tests {
             .collect();
         let (request, outcome) = v.check_request(&req).unwrap();
         schema_fields(&mut ctx, &scheme, &outcome);
-        if let Some(body) = body {
+        if let (Some(request), Some(body)) = (request, body) {
             let violations = v.check_body(&request, Some("application/json"), body, false);
             schema_body_fields(&mut ctx, &scheme, &violations);
         }
@@ -208,6 +224,13 @@ mod tests {
             "not schema_validation.operation.matched"
         ));
         assert!(check(&scheme, &ctx, "not schema_validation.violated"));
+        for expr in [
+            "len(schema_validation.query.violated_parameters) == 0",
+            "len(schema_validation.body.violated_parameters) == 0",
+            "len(schema_validation.query.undeclared_parameters) == 0",
+        ] {
+            assert!(check(&scheme, &ctx, expr), "{expr}");
+        }
     }
 
     #[test]
