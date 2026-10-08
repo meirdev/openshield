@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use aho_corasick::AhoCorasick;
@@ -33,23 +33,26 @@ pub enum BytesListMode {
     Substring,
 }
 
+/// A list as configured. Items are a set, so two lists with the same items
+/// compare and serialize the same regardless of order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct BytesListSpec {
     mode: BytesListMode,
-    items: Vec<String>,
+    items: BTreeSet<String>,
 }
 
+#[derive(Clone)]
 enum CompiledBytesList {
     Exact(HashSet<Vec<u8>>),
     Substring(AhoCorasick),
 }
 
 impl CompiledBytesList {
-    fn build(name: &str, spec: &BytesListSpec) -> Self {
+    fn build(name: &str, spec: &BytesListSpec) -> Result<Self, String> {
         match spec.mode {
-            BytesListMode::Exact => {
-                Self::Exact(spec.items.iter().map(|s| s.as_bytes().to_vec()).collect())
-            }
+            BytesListMode::Exact => Ok(Self::Exact(
+                spec.items.iter().map(|s| s.as_bytes().to_vec()).collect(),
+            )),
             BytesListMode::Substring => {
                 // Skip empty patterns: they would match every value.
                 let patterns: Vec<&[u8]> = spec
@@ -59,25 +62,13 @@ impl CompiledBytesList {
                     .map(|s| s.as_bytes())
                     .collect();
                 if patterns.len() != spec.items.len() {
-                    log::warn!(
-                        "Substring list '{}': ignoring {} empty item(s)",
-                        name,
-                        spec.items.len() - patterns.len()
-                    );
+                    log::warn!("Substring list '{name}': ignoring an empty item");
                 }
-                let ac = AhoCorasick::builder()
+                AhoCorasick::builder()
                     .ascii_case_insensitive(true)
                     .build(&patterns)
-                    .unwrap_or_else(|e| {
-                        log::error!(
-                            "Substring list '{}': failed to build automaton: {}",
-                            name,
-                            e
-                        );
-                        let none: [&[u8]; 0] = [];
-                        AhoCorasick::new(none).expect("empty automaton")
-                    });
-                Self::Substring(ac)
+                    .map(Self::Substring)
+                    .map_err(|e| format!("substring list '{name}': {e}"))
             }
         }
     }
@@ -91,78 +82,94 @@ impl CompiledBytesList {
     }
 }
 
-pub struct BytesListMatcher {
+/// The configured lists and their compiled forms, shared by every request
+/// context so cloning the matcher is one `Arc` clone.
+#[derive(Default)]
+struct Lists {
     raw: HashMap<String, BytesListSpec>,
-    compiled: Arc<HashMap<String, CompiledBytesList>>,
+    compiled: HashMap<String, CompiledBytesList>,
+}
+
+impl Lists {
+    fn compile(raw: HashMap<String, BytesListSpec>) -> Result<Self, String> {
+        let compiled = raw
+            .iter()
+            .map(|(name, spec)| Ok((name.clone(), CompiledBytesList::build(name, spec)?)))
+            .collect::<Result<_, String>>()?;
+        Ok(Self { raw, compiled })
+    }
+}
+
+#[derive(Clone)]
+pub struct BytesListMatcher {
+    lists: Arc<Lists>,
 }
 
 impl BytesListMatcher {
     pub fn new() -> Self {
         Self {
-            raw: HashMap::new(),
-            compiled: Arc::new(HashMap::new()),
+            lists: Arc::new(Lists::default()),
         }
     }
 
-    /// Adds (or replaces) a list with the given matching mode.
-    pub fn add_list(&mut self, name: &str, mode: BytesListMode, items: &[&str]) {
-        self.raw.insert(
-            name.to_string(),
-            BytesListSpec {
-                mode,
-                items: items.iter().map(|s| s.to_string()).collect(),
-            },
-        );
-        self.compiled = Arc::new(Self::compile(&self.raw));
-    }
-
-    fn compile(raw: &HashMap<String, BytesListSpec>) -> HashMap<String, CompiledBytesList> {
-        raw.iter()
-            .map(|(name, spec)| (name.clone(), CompiledBytesList::build(name, spec)))
-            .collect()
-    }
-}
-
-impl Clone for BytesListMatcher {
-    fn clone(&self) -> Self {
-        Self {
-            raw: self.raw.clone(),
-            compiled: Arc::clone(&self.compiled),
-        }
+    /// Adds (or replaces) a list with the given matching mode. Fails when
+    /// the list cannot be compiled, so a misconfigured list is never
+    /// silently empty.
+    pub fn add_list(
+        &mut self,
+        name: &str,
+        mode: BytesListMode,
+        items: &[&str],
+    ) -> Result<(), String> {
+        let spec = BytesListSpec {
+            mode,
+            items: items.iter().map(|s| s.to_string()).collect(),
+        };
+        let compiled = CompiledBytesList::build(name, &spec)?;
+        let mut lists = Lists {
+            raw: self.lists.raw.clone(),
+            compiled: self.lists.compiled.clone(),
+        };
+        lists.raw.insert(name.to_string(), spec);
+        lists.compiled.insert(name.to_string(), compiled);
+        self.lists = Arc::new(lists);
+        Ok(())
     }
 }
 
 impl std::fmt::Debug for BytesListMatcher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BytesListMatcher")
-            .field("lists", &self.raw)
+            .field("lists", &self.lists.raw)
             .finish()
     }
 }
 
 impl PartialEq for BytesListMatcher {
     fn eq(&self, other: &Self) -> bool {
-        self.raw == other.raw
+        self.lists.raw == other.lists.raw
     }
 }
 
 impl Serialize for BytesListMatcher {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.raw.serialize(serializer)
+        self.lists.raw.serialize(serializer)
     }
 }
 
 impl<'de> Deserialize<'de> for BytesListMatcher {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw: HashMap<String, BytesListSpec> = HashMap::deserialize(deserializer)?;
-        let compiled = Arc::new(Self::compile(&raw));
-        Ok(Self { raw, compiled })
+        let lists = Lists::compile(raw).map_err(serde::de::Error::custom)?;
+        Ok(Self {
+            lists: Arc::new(lists),
+        })
     }
 }
 
 impl ListMatcher for BytesListMatcher {
     fn match_value(&self, list_name: &str, val: &LhsValue<'_>) -> bool {
-        let Some(list) = self.compiled.get(list_name) else {
+        let Some(list) = self.lists.compiled.get(list_name) else {
             return false;
         };
         let LhsValue::Bytes(bytes) = val else {
@@ -172,8 +179,7 @@ impl ListMatcher for BytesListMatcher {
     }
 
     fn clear(&mut self) {
-        self.raw.clear();
-        self.compiled = Arc::new(HashMap::new());
+        self.lists = Arc::new(Lists::default());
     }
 }
 
@@ -185,10 +191,17 @@ mod tests {
         LhsValue::Bytes(s.as_bytes().into())
     }
 
+    fn matcher(lists: &[(&str, BytesListMode, &[&str])]) -> BytesListMatcher {
+        let mut m = BytesListMatcher::new();
+        for (name, mode, items) in lists {
+            m.add_list(name, *mode, items).unwrap();
+        }
+        m
+    }
+
     #[test]
     fn exact_matches_whole_value_only() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("ua", BytesListMode::Exact, &["sqlmap", "nikto"]);
+        let m = matcher(&[("ua", BytesListMode::Exact, &["sqlmap", "nikto"])]);
         assert!(m.match_value("ua", &bytes("sqlmap")));
         assert!(m.match_value("ua", &bytes("nikto")));
         assert!(!m.match_value("ua", &bytes("sqlmap/1.0")));
@@ -198,8 +211,7 @@ mod tests {
 
     #[test]
     fn substring_matches_anywhere() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("ua", BytesListMode::Substring, &["sqlmap", "nikto"]);
+        let m = matcher(&[("ua", BytesListMode::Substring, &["sqlmap", "nikto"])]);
         assert!(m.match_value("ua", &bytes("sqlmap")));
         assert!(m.match_value("ua", &bytes("Mozilla sqlmap/1.0")));
         assert!(m.match_value("ua", &bytes("xxniktoxx")));
@@ -209,8 +221,7 @@ mod tests {
 
     #[test]
     fn substring_is_ascii_case_insensitive() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("ua", BytesListMode::Substring, &["SqlMap"]);
+        let m = matcher(&[("ua", BytesListMode::Substring, &["SqlMap"])]);
         assert!(m.match_value("ua", &bytes("sqlmap/1.0")));
         assert!(m.match_value("ua", &bytes("Mozilla SQLMAP")));
         assert!(!m.match_value("ua", &bytes("sql map")));
@@ -218,24 +229,23 @@ mod tests {
 
     #[test]
     fn substring_ignores_empty_patterns() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("l", BytesListMode::Substring, &["", "abc"]);
+        let m = matcher(&[("l", BytesListMode::Substring, &["", "abc"])]);
         assert!(!m.match_value("l", &bytes("zzz")));
         assert!(m.match_value("l", &bytes("zabcz")));
     }
 
     #[test]
     fn empty_substring_list_never_matches() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("l", BytesListMode::Substring, &[]);
+        let m = matcher(&[("l", BytesListMode::Substring, &[])]);
         assert!(!m.match_value("l", &bytes("anything")));
     }
 
     #[test]
     fn works_on_non_utf8_bytes() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("s", BytesListMode::Substring, &["abc"]);
-        m.add_list("e", BytesListMode::Exact, &["abc"]);
+        let m = matcher(&[
+            ("s", BytesListMode::Substring, &["abc"]),
+            ("e", BytesListMode::Exact, &["abc"]),
+        ]);
         let raw: &[u8] = &[0xff, b'a', b'b', b'c', 0xfe];
         assert!(m.match_value("s", &LhsValue::Bytes(raw.into())));
         assert!(!m.match_value("e", &LhsValue::Bytes(raw.into())));
@@ -243,17 +253,38 @@ mod tests {
 
     #[test]
     fn unknown_list_and_wrong_type_do_not_match() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("l", BytesListMode::Exact, &["x"]);
+        let m = matcher(&[("l", BytesListMode::Exact, &["x"])]);
         assert!(!m.match_value("missing", &bytes("x")));
         assert!(!m.match_value("l", &LhsValue::Int(1)));
     }
 
     #[test]
+    fn adding_a_list_keeps_the_others_and_replaces_by_name() {
+        let mut m = matcher(&[("a", BytesListMode::Exact, &["1"])]);
+        m.add_list("b", BytesListMode::Substring, &["2"]).unwrap();
+        m.add_list("a", BytesListMode::Exact, &["3"]).unwrap();
+        assert!(!m.match_value("a", &bytes("1")));
+        assert!(m.match_value("a", &bytes("3")));
+        assert!(m.match_value("b", &bytes("x2x")));
+    }
+
+    #[test]
+    fn item_order_and_duplicates_do_not_matter() {
+        let a = matcher(&[("l", BytesListMode::Exact, &["x", "y", "x"])]);
+        let b = matcher(&[("l", BytesListMode::Exact, &["y", "x"])]);
+        assert_eq!(a, b);
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            serde_json::to_string(&b).unwrap()
+        );
+    }
+
+    #[test]
     fn serde_round_trip_preserves_modes() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("exact", BytesListMode::Exact, &["a", "b"]);
-        m.add_list("sub", BytesListMode::Substring, &["needle"]);
+        let m = matcher(&[
+            ("exact", BytesListMode::Exact, &["a", "b"]),
+            ("sub", BytesListMode::Substring, &["needle"]),
+        ]);
         let json = serde_json::to_string(&m).unwrap();
         let back: BytesListMatcher = serde_json::from_str(&json).unwrap();
         assert_eq!(m, back);
@@ -264,8 +295,7 @@ mod tests {
 
     #[test]
     fn clear_removes_everything() {
-        let mut m = BytesListMatcher::new();
-        m.add_list("l", BytesListMode::Substring, &["x"]);
+        let mut m = matcher(&[("l", BytesListMode::Substring, &["x"])]);
         m.clear();
         assert!(!m.match_value("l", &bytes("x")));
     }

@@ -168,9 +168,21 @@ pub struct MetricsConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ListConfig {
     pub name: String,
-    pub kind: String,
+    pub kind: ListKind,
     #[serde(default)]
     pub items: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ListKind {
+    /// IP addresses and CIDRs.
+    Ip,
+    /// Whole-value string match.
+    #[serde(alias = "bytes")]
+    String,
+    /// Any item anywhere in the value, ASCII case-insensitive.
+    Substring,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -431,6 +443,14 @@ impl Config {
         if self.upstream.is_empty() {
             return Err("upstream address is required".into());
         }
+        for list in &self.lists {
+            if list.name.is_empty() {
+                return Err("list name is required".into());
+            }
+            if self.lists.iter().filter(|l| l.name == list.name).count() > 1 {
+                return Err(format!("duplicate list name '{}'", list.name).into());
+            }
+        }
         for tc in &self.token_configurations {
             if tc.id.is_empty() {
                 return Err("token configuration id is required".into());
@@ -684,6 +704,34 @@ token_configurations:
           alg: ES256
         - {kty: oct, kid: hs-1, alg: HS256, k: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}
 "#;
+
+    #[test]
+    fn lists_need_a_known_kind_and_unique_names() {
+        let cfg = parse(
+            "listen: a\nupstream: b\nlists:\n  - {name: a, kind: ip, items: [10.0.0.0/8]}\n  - \
+             {name: b, kind: bytes}\n  - {name: c, kind: substring, items: [sqlmap]}\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.lists[0].kind, ListKind::Ip);
+        assert_eq!(cfg.lists[1].kind, ListKind::String, "bytes is an alias");
+        assert_eq!(cfg.lists[2].kind, ListKind::Substring);
+
+        let err =
+            parse("listen: a\nupstream: b\nlists:\n  - {name: a, kind: subtring}\n").unwrap_err();
+        assert!(
+            err.to_string().contains("unknown variant `subtring`"),
+            "{err}"
+        );
+
+        let err = parse("listen: a\nupstream: b\nlists:\n  - {name: a}\n").unwrap_err();
+        assert!(err.to_string().contains("missing field `kind`"), "{err}");
+
+        let err = parse(
+            "listen: a\nupstream: b\nlists:\n  - {name: a, kind: ip}\n  - {name: a, kind: string}\n",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("duplicate list name 'a'"), "{err}");
+    }
 
     #[test]
     fn schemas_parse_and_need_unique_names() {

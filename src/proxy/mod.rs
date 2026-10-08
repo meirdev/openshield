@@ -22,7 +22,7 @@ use crate::logging::{
 use crate::waf::data::{MultipartPartData, RequestData, ResponseData};
 use crate::waf::engine::{Engine, Phase, RuleAction};
 use crate::waf::jwt::JwtValidator;
-use crate::waf::lists::{BytesListMatcher, IpListMatcher};
+use crate::waf::lists::{self, BytesListMatcher, IpListMatcher};
 use crate::waf::populate;
 use crate::waf::schema::SchemaValidator;
 
@@ -419,22 +419,7 @@ impl ProxyHttp for ReverseProxyHandler {
             geo: None,
             exec_ctx: {
                 let mut ctx = crate::waf::scheme::new_context(&self.scheme);
-                if let Some(list_ref) = self.scheme.get_list(&wirefilter_engine::Type::Ip) {
-                    let matcher = ctx.get_list_matcher_mut(list_ref);
-                    let ip_matcher = matcher
-                        .as_any_mut()
-                        .downcast_mut::<IpListMatcher>()
-                        .unwrap();
-                    *ip_matcher = (*self.ip_lists).clone();
-                }
-                if let Some(list_ref) = self.scheme.get_list(&wirefilter_engine::Type::Bytes) {
-                    let matcher = ctx.get_list_matcher_mut(list_ref);
-                    let bytes_matcher = matcher
-                        .as_any_mut()
-                        .downcast_mut::<BytesListMatcher>()
-                        .unwrap();
-                    *bytes_matcher = (*self.bytes_lists).clone();
-                }
+                lists::install(&mut ctx, &self.scheme, &self.ip_lists, &self.bytes_lists);
                 ctx
             },
             schema_request: None,
