@@ -42,3 +42,21 @@ pub struct MultipartPartData {
     pub content_transfer_encoding: Option<String>,
     pub value: String,
 }
+
+impl From<&crate::geoip::GeoIpLookup> for GeoData {
+    fn from(g: &crate::geoip::GeoIpLookup) -> Self {
+        Self {
+            asn: g.as_num,
+            city: g.city.clone(),
+            continent: g.continent.clone(),
+            country: g.country.clone(),
+            lat: g.lat,
+            lon: g.lon,
+            metro_code: g.metro_code,
+            postal_code: g.postal_code.clone(),
+            region: g.region.clone(),
+            region_code: g.region_code.clone(),
+            timezone: g.timezone.clone(),
+        }
+    }
+}

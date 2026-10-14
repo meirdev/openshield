@@ -13,6 +13,29 @@ pub struct ChallengeManager {
     challenge_page: String,
 }
 
+/// Fields of the form the challenge page posts back.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct VerificationForm {
+    pub token: Option<String>,
+    pub redirect: Option<String>,
+}
+
+impl VerificationForm {
+    /// Parse the `application/x-www-form-urlencoded` body of a verification
+    /// POST.
+    pub fn parse(body: &[u8]) -> Self {
+        let mut form = Self::default();
+        for (k, v) in form_urlencoded::parse(body) {
+            match &*k {
+                "cf-turnstile-response" => form.token = Some(v.into_owned()),
+                "redirect" => form.redirect = Some(v.into_owned()),
+                _ => {}
+            }
+        }
+        form
+    }
+}
+
 impl ChallengeManager {
     pub fn new(config: &ChallengeConfig) -> Self {
         let challenge_page = if let Some(ref path) = config.custom_page {
@@ -49,6 +72,11 @@ impl ChallengeManager {
     /// Return the challenge POST path.
     pub fn challenge_path(&self) -> &str {
         &self.config.challenge_path
+    }
+
+    /// True for the POST the challenge page sends back for verification.
+    pub fn is_verification_request(&self, method: &str, path: &str) -> bool {
+        method == "POST" && path == self.config.challenge_path
     }
 
     /// Verify a Turnstile token with Cloudflare's API.
