@@ -432,7 +432,12 @@ impl Config {
 
     pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
-        let config: Config = serde_yaml::from_str(&content)?;
+        Self::from_yaml(&content)
+    }
+
+    /// Parse and validate a configuration from its YAML text.
+    pub fn from_yaml(yaml: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let config: Config = serde_yaml::from_str(yaml)?;
         config.validate()?;
         Ok(config)
     }

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use clap::Parser;
 use log::{error, info};
 use openshield_core::config::Config;
-use openshield_core::{challenge, compiler, geoip, logging, waf};
+use openshield_core::{Waf, logging};
 use pingora::prelude::*;
 use pingora::proxy::http_proxy_service;
 use pingora::server::configuration::Opt as PingoraOpt;
@@ -66,68 +66,10 @@ fn main() {
     };
     info!("Config loaded from {:?}", cli.config);
 
-    // GeoIP (optional)
-    let geoip = config.geoip.as_ref().map(|geo_cfg| {
-        let g = geoip::GeoIp::open(&geo_cfg.city_mmdb, &geo_cfg.asn_mmdb)
-            .expect("Failed to open MaxMind databases");
-        info!(
-            "GeoIP loaded: city={:?}, asn={:?}",
-            geo_cfg.city_mmdb, geo_cfg.asn_mmdb
-        );
-        g
-    });
-
-    // WAF scheme + engine
-    let scheme = Arc::new(waf::scheme::build(&config.scores, &config.token_ids()));
-    info!("WAF scheme: {} fields", scheme.field_count());
-
-    let engine = match compiler::compile(&config, &scheme, None) {
-        Ok(e) => {
-            info!("Rules compiled: {}", e.rule_count());
-            e
-        }
+    let waf = match Waf::from_config(&config) {
+        Ok(waf) => Arc::new(waf),
         Err(e) => {
-            error!("Failed to compile rules: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // JWT validation
-    let jwt = match waf::jwt::JwtValidator::new(&config.token_configurations, &scheme) {
-        Ok(v) => {
-            if !v.is_empty() {
-                info!(
-                    "Token configurations: {}",
-                    config.token_configurations.len()
-                );
-            }
-            v
-        }
-        Err(e) => {
-            error!("Failed to load token configurations: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Schema validation
-    let schemas = match waf::schema::SchemaValidator::new(&config.schemas) {
-        Ok(s) => {
-            if !s.is_empty() {
-                info!("Schemas: {}", config.schemas.len());
-            }
-            s
-        }
-        Err(e) => {
-            error!("Failed to load schemas: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Lists
-    let (ip_lists, bytes_lists) = match waf::lists::build_from_config(&config.lists) {
-        Ok(lists) => lists,
-        Err(e) => {
-            error!("Failed to load lists: {}", e);
+            error!("Failed to initialize WAF: {}", e);
             std::process::exit(1);
         }
     };
@@ -138,12 +80,6 @@ fn main() {
         "Logging: access={:?}, audit={:?}, format={}",
         config.logging.access_log, config.logging.audit_log, config.logging.format
     );
-
-    // Challenge
-    let challenge = config.challenge.as_ref().map(|cfg| {
-        info!("Challenge page enabled (Turnstile)");
-        Arc::new(challenge::ChallengeManager::new(cfg))
-    });
 
     // Upstream
     let (upstream_host, upstream_port, upstream_tls) = parse_upstream(&config.upstream);
@@ -179,34 +115,12 @@ fn main() {
     let mut server = Server::new_with_opt_and_conf(Some(pingora_opt), conf);
     server.bootstrap();
 
-    if config.detection_only {
-        info!("Detection-only mode: rules evaluate but no requests will be blocked");
-    }
-
-    let has_request_body_rules = engine.has_phase(&waf::engine::Phase::RequestBody);
-    let has_response_body_rules = engine.has_phase(&waf::engine::Phase::ResponseBody);
-
     let handler = proxy::ReverseProxyHandler {
-        detection_only: config.detection_only,
+        waf,
+        logger,
         upstream_tls,
         upstream_host,
         upstream_port,
-        geoip,
-        scheme: scheme.clone(),
-        engine,
-        jwt,
-        schemas,
-        max_request_body_buffer: config.max_request_body_buffer,
-        request_body_limit_action: config.request_body_limit_action,
-        inspect_response_body: config.inspect_response_body,
-        max_response_body_buffer: config.max_response_body_buffer,
-        response_body_limit_action: config.response_body_limit_action,
-        ip_lists: Arc::new(ip_lists),
-        bytes_lists: Arc::new(bytes_lists),
-        challenge,
-        logger,
-        has_request_body_rules,
-        has_response_body_rules,
     };
 
     let mut proxy_service = http_proxy_service(&server.configuration, handler);

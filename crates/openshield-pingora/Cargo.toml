@@ -11,24 +11,16 @@ path = "src/main.rs"
 [dependencies]
 openshield-core.workspace = true
 
-wirefilter-engine.workspace = true
-serde_json.workspace = true
 clap.workspace = true
 pingora.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
-form_urlencoded.workspace = true
-multer.workspace = true
-tokio.workspace = true
-tokio-stream.workspace = true
 log.workspace = true
 env_logger.workspace = true
 signal-hook.workspace = true
 prometheus.workspace = true
 lazy_static.workspace = true
 http.workspace = true
-chrono.workspace = true
 mimalloc.workspace = true
 pingora-prometheus.workspace = true
-uuid.workspace = true
 libc.workspace = true
