@@ -8,6 +8,8 @@ OpenShield reads YAML from `config.yaml`, or the file passed with `-c`:
 
 Only `listen` and `upstream` are required. Without a root ruleset, OpenShield forwards requests without WAF inspection.
 
+The proxy, TLS, logging and metrics settings below belong to the proxy. Every other key configures the WAF itself, and is the part another host of the `openshield-core` library consumes.
+
 ```yaml
 listen: "127.0.0.1:8080"
 upstream: "http://127.0.0.1:3000"
@@ -73,8 +75,9 @@ logging:
   format: json # json or text
   access_log: /dev/stdout
   audit_log: /dev/stderr
-  log_payloads: false
 ```
+
+Set the top-level `log_payloads: true` to include, in each audit entry, the field values referenced by the rules that matched. It defaults to `false`.
 
 Add `metrics` to expose Prometheus metrics. The values below are the defaults when the block is present:
 

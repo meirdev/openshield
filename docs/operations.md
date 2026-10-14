@@ -29,7 +29,7 @@ Access and audit logs share a `request_id` so you can trace a WAF decision to it
 | Access | Request metadata, status, duration, and byte counts                                | JSON on stdout |
 | Audit  | WAF action, matched rules, scores, request details, and available response details | JSON on stderr |
 
-Audit entries are written when rules match with logging enabled. Set `logging.enabled: false` on an individual rule to omit its match. Set the global `logging.log_payloads: true` to include field values referenced by matched rules.
+Audit entries are written when rules match with logging enabled. Set `logging.enabled: false` on an individual rule to omit its match. Set the top-level `log_payloads: true` to include field values referenced by matched rules.
 
 Configure output paths and JSON or text formatting in [configuration](configuration.md#logs-and-metrics). To extend logging in code, implement `LogSink` or `Formatter`.
 

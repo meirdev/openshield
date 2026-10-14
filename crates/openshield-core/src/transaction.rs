@@ -630,7 +630,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::config::Config;
+    use crate::config::WafConfig;
 
     /// A firewall from top-level `settings` YAML plus root-ruleset `rules`
     /// (a YAML list, unindented).
@@ -640,11 +640,9 @@ mod tests {
             .lines()
             .map(|l| format!("      {l}\n"))
             .collect();
-        let yaml = format!(
-            "listen: \"127.0.0.1:8080\"\nupstream: \"http://127.0.0.1:9000\"\n{settings}\n\
-             rulesets:\n  - name: main\n    kind: root\n    rules:\n{rules}"
-        );
-        let config = Config::from_yaml(&yaml).expect("config should parse");
+        let yaml =
+            format!("{settings}\nrulesets:\n  - name: main\n    kind: root\n    rules:\n{rules}");
+        let config = WafConfig::from_yaml(&yaml).expect("config should parse");
         Arc::new(Waf::from_config(&config).expect("waf should build"))
     }
 

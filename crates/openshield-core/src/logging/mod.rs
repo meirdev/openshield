@@ -7,7 +7,34 @@ pub use format::{JsonFormatter, TextFormatter};
 use serde::Serialize;
 pub use sink::{WriterSink, open_writer};
 
-use crate::config::LoggingConfig;
+use std::path::PathBuf;
+
+use serde::Deserialize;
+
+/// Where and how the [`Logger`] writes access and audit logs.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LoggingConfig {
+    /// App log level (debug/info/warn/error)
+    pub level: String,
+    /// Access + audit log format (text/json)
+    pub format: String,
+    /// Access log output path (/dev/stdout, /dev/stderr, or file)
+    pub access_log: PathBuf,
+    /// Audit log output path: detailed logs when rules match
+    pub audit_log: PathBuf,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            level: "info".into(),
+            format: "json".into(),
+            access_log: PathBuf::from("/dev/stdout"),
+            audit_log: PathBuf::from("/dev/stderr"),
+        }
+    }
+}
 
 /// Formats log entries into bytes.
 pub trait Formatter: Send + Sync {

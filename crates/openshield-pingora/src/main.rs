@@ -1,14 +1,15 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+mod config;
 mod proxy;
 mod reload;
 
 use std::sync::Arc;
 
 use clap::Parser;
+use config::ServerConfig;
 use log::{error, info};
-use openshield_core::config::Config;
 use openshield_core::{Waf, logging};
 use pingora::prelude::*;
 use pingora::proxy::http_proxy_service;
@@ -57,7 +58,7 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let config = match Config::load(&cli.config) {
+    let config = match ServerConfig::load(&cli.config) {
         Ok(c) => c,
         Err(e) => {
             error!("Failed to load config from {:?}: {}", cli.config, e);
@@ -66,7 +67,7 @@ fn main() {
     };
     info!("Config loaded from {:?}", cli.config);
 
-    let waf = match Waf::from_config(&config) {
+    let waf = match Waf::from_config(&config.waf) {
         Ok(waf) => Arc::new(waf),
         Err(e) => {
             error!("Failed to initialize WAF: {}", e);
