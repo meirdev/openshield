@@ -12,7 +12,7 @@ use crate::waf::ratelimit::RateLimitManager;
 /// Compile the root rulesets from config into an Engine, expanding
 /// `execute` rules in place.
 pub fn compile(
-    config: &config::Config,
+    config: &config::WafConfig,
     scheme: &Scheme,
     existing_mgr: Option<RateLimitManager>,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
@@ -79,7 +79,7 @@ pub fn compile(
         }
     }
 
-    Ok(Engine::new(rules, mgr, config.logging.log_payloads))
+    Ok(Engine::new(rules, mgr, config.log_payloads))
 }
 
 /// Compile a single rule. `action` may differ from `rule_cfg.action` when an
@@ -191,14 +191,12 @@ mod tests {
     use super::*;
 
     fn load(yaml: &str) -> Result<Engine, Box<dyn std::error::Error>> {
-        let cfg: config::Config = serde_yaml::from_str(yaml)?;
+        let cfg: config::WafConfig = serde_yaml::from_str(yaml)?;
         let scheme = crate::waf::scheme::build(&cfg.scores, &cfg.token_ids());
         compile(&cfg, &scheme, None)
     }
 
     const BASE: &str = r#"
-listen: a
-upstream: b
 rulesets:
   - name: crs
     rules:
@@ -335,7 +333,7 @@ rulesets:
 
     #[test]
     fn execute_with_true_runs_ruleset_unconditionally() {
-        let cfg: config::Config = serde_yaml::from_str(&format!(
+        let cfg: config::WafConfig = serde_yaml::from_str(&format!(
             r#"{BASE}
   - name: main
     kind: root
@@ -371,11 +369,11 @@ rulesets:
         }
     }
 
-    fn jwt_config(rules: &str) -> config::Config {
+    fn jwt_config(rules: &str) -> config::WafConfig {
         use crate::waf::jwt::test_support::hs256_config;
 
         serde_yaml::from_str(&format!(
-            "listen: a\nupstream: b\ntoken_configurations:{}rulesets:\n  - name: main\n    kind: \
+            "token_configurations:{}rulesets:\n  - name: main\n    kind: \
              root\n    rules:\n{rules}",
             hs256_config("api")
         ))

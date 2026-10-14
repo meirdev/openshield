@@ -11,6 +11,8 @@ path = "src/main.rs"
 [dependencies]
 openshield-core.workspace = true
 
+serde.workspace = true
+serde_yaml.workspace = true
 clap.workspace = true
 pingora.workspace = true
 async-trait.workspace = true

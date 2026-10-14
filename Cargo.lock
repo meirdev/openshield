@@ -2047,6 +2047,8 @@ dependencies = [
  "pingora",
  "pingora-prometheus",
  "prometheus",
+ "serde",
+ "serde_yaml",
  "signal-hook",
 ]
 

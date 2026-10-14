@@ -8,7 +8,7 @@ use wirefilter_engine::Scheme;
 
 use crate::challenge::ChallengeManager;
 use crate::compiler;
-use crate::config::{BodyLimitAction, Config};
+use crate::config::{BodyLimitAction, WafConfig};
 use crate::geoip::GeoIp;
 use crate::transaction::Transaction;
 use crate::waf::engine::{Engine, Phase};
@@ -29,8 +29,8 @@ pub struct Settings {
     pub response_body_limit_action: BodyLimitAction,
 }
 
-impl From<&Config> for Settings {
-    fn from(config: &Config) -> Self {
+impl From<&WafConfig> for Settings {
+    fn from(config: &WafConfig) -> Self {
         Self {
             detection_only: config.detection_only,
             max_request_body_buffer: config.max_request_body_buffer,
@@ -61,7 +61,7 @@ pub struct Waf {
 }
 
 impl Waf {
-    pub fn from_config(config: &Config) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_config(config: &WafConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let geoip = match config.geoip.as_ref() {
             Some(geo_cfg) => {
                 let g = GeoIp::open(&geo_cfg.city_mmdb, &geo_cfg.asn_mmdb)

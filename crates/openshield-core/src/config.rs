@@ -2,28 +2,13 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+/// WAF configuration: everything the core needs, and nothing about the
+/// server hosting it. Hosts embed this in their own config (for example with
+/// `#[serde(flatten)]`) or load it on its own.
 #[derive(Debug, Clone, Deserialize)]
-pub struct Config {
-    pub listen: String,
-    pub upstream: String,
-
-    #[serde(default)]
-    pub tls: Option<TlsConfig>,
-
+pub struct WafConfig {
     #[serde(default)]
     pub detection_only: bool,
-
-    #[serde(default)]
-    pub workers: Option<usize>,
-
-    #[serde(default = "default_pid_file")]
-    pub pid_file: String,
-
-    #[serde(default = "default_upgrade_sock")]
-    pub upgrade_sock: String,
-
-    #[serde(default)]
-    pub upstream_keepalive_pool: Option<usize>,
 
     #[serde(default = "default_max_request_body_buffer")]
     pub max_request_body_buffer: usize,
@@ -40,14 +25,12 @@ pub struct Config {
     #[serde(default)]
     pub response_body_limit_action: BodyLimitAction,
 
+    /// Log the payload values that triggered each matched rule (audit log).
     #[serde(default)]
-    pub logging: LoggingConfig,
+    pub log_payloads: bool,
 
     #[serde(default)]
     pub geoip: Option<GeoIpConfig>,
-
-    #[serde(default)]
-    pub metrics: Option<MetricsConfig>,
 
     #[serde(default)]
     pub scores: Vec<String>,
@@ -120,50 +103,9 @@ pub enum RulesetKind {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct TlsConfig {
-    pub cert: PathBuf,
-    pub key: PathBuf,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct LoggingConfig {
-    /// App log level (debug/info/warn/error)
-    pub level: String,
-    /// Access + audit log format (text/json)
-    pub format: String,
-    /// Access log output path (/dev/stdout, /dev/stderr, or file)
-    pub access_log: PathBuf,
-    /// Audit log output path — detailed logs when rules match
-    pub audit_log: PathBuf,
-    /// Log the payload values that triggered each matched rule (audit log).
-    pub log_payloads: bool,
-}
-
-impl Default for LoggingConfig {
-    fn default() -> Self {
-        Self {
-            level: "info".into(),
-            format: "json".into(),
-            access_log: PathBuf::from("/dev/stdout"),
-            audit_log: PathBuf::from("/dev/stderr"),
-            log_payloads: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
 pub struct GeoIpConfig {
     pub city_mmdb: PathBuf,
     pub asn_mmdb: PathBuf,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct MetricsConfig {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default = "default_metrics_listen")]
-    pub listen: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -394,15 +336,6 @@ fn default_max_response_body_buffer() -> usize {
 fn default_true() -> bool {
     true
 }
-fn default_metrics_listen() -> String {
-    "127.0.0.1:9090".into()
-}
-fn default_pid_file() -> String {
-    "/tmp/openshield.pid".into()
-}
-fn default_upgrade_sock() -> String {
-    "/tmp/openshield_upgrade.sock".into()
-}
 fn default_challenge_cookie_ttl() -> u64 {
     3600
 }
@@ -422,7 +355,7 @@ fn default_increment() -> i64 {
     1
 }
 
-impl Config {
+impl WafConfig {
     pub fn token_ids(&self) -> Vec<String> {
         self.token_configurations
             .iter()
@@ -437,18 +370,14 @@ impl Config {
 
     /// Parse and validate a configuration from its YAML text.
     pub fn from_yaml(yaml: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let config: Config = serde_yaml::from_str(yaml)?;
+        let config: WafConfig = serde_yaml::from_str(yaml)?;
         config.validate()?;
         Ok(config)
     }
 
-    fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
-        if self.listen.is_empty() {
-            return Err("listen address is required".into());
-        }
-        if self.upstream.is_empty() {
-            return Err("upstream address is required".into());
-        }
+    /// Check cross-field constraints. `load` and `from_yaml` already call
+    /// this; hosts that deserialize the config themselves must call it.
+    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
         for list in &self.lists {
             if list.name.is_empty() {
                 return Err("list name is required".into());
@@ -632,15 +561,13 @@ impl Config {
 mod tests {
     use super::*;
 
-    fn parse(yaml: &str) -> Result<Config, Box<dyn std::error::Error>> {
-        let cfg: Config = serde_yaml::from_str(yaml)?;
+    fn parse(yaml: &str) -> Result<WafConfig, Box<dyn std::error::Error>> {
+        let cfg: WafConfig = serde_yaml::from_str(yaml)?;
         cfg.validate()?;
         Ok(cfg)
     }
 
     const BASE: &str = r#"
-listen: "127.0.0.1:8080"
-upstream: "http://127.0.0.1:9000"
 scores: [sqli]
 rulesets:
   - name: crs
@@ -703,8 +630,6 @@ rulesets:
     }
 
     const TOKEN_CONFIG: &str = r#"
-listen: a
-upstream: b
 token_configurations:
   - id: api
     description: Tokens issued by the auth service
@@ -726,7 +651,7 @@ token_configurations:
     #[test]
     fn lists_need_a_known_kind_and_unique_names() {
         let cfg = parse(
-            "listen: a\nupstream: b\nlists:\n  - {name: a, kind: ip, items: [10.0.0.0/8]}\n  - \
+            "lists:\n  - {name: a, kind: ip, items: [10.0.0.0/8]}\n  - \
              {name: b, kind: bytes}\n  - {name: c, kind: substring, items: [sqlmap]}\n",
         )
         .unwrap();
@@ -734,27 +659,24 @@ token_configurations:
         assert_eq!(cfg.lists[1].kind, ListKind::String, "bytes is an alias");
         assert_eq!(cfg.lists[2].kind, ListKind::Substring);
 
-        let err =
-            parse("listen: a\nupstream: b\nlists:\n  - {name: a, kind: subtring}\n").unwrap_err();
+        let err = parse("lists:\n  - {name: a, kind: subtring}\n").unwrap_err();
         assert!(
             err.to_string().contains("unknown variant `subtring`"),
             "{err}"
         );
 
-        let err = parse("listen: a\nupstream: b\nlists:\n  - {name: a}\n").unwrap_err();
+        let err = parse("lists:\n  - {name: a}\n").unwrap_err();
         assert!(err.to_string().contains("missing field `kind`"), "{err}");
 
-        let err = parse(
-            "listen: a\nupstream: b\nlists:\n  - {name: a, kind: ip}\n  - {name: a, kind: string}\n",
-        )
-        .unwrap_err();
+        let err =
+            parse("lists:\n  - {name: a, kind: ip}\n  - {name: a, kind: string}\n").unwrap_err();
         assert!(err.to_string().contains("duplicate list name 'a'"), "{err}");
     }
 
     #[test]
     fn schemas_parse_and_need_unique_names() {
         let cfg = parse(
-            "listen: a\nupstream: b\nschemas:\n  - {name: pets, file: ./pets.yaml, hosts: \
+            "schemas:\n  - {name: pets, file: ./pets.yaml, hosts: \
              [api.example.com]}\n  - {name: all, file: all.json}\n",
         )
         .unwrap();
@@ -763,7 +685,7 @@ token_configurations:
         assert!(cfg.schemas[1].hosts.is_empty());
 
         let err = parse(
-            "listen: a\nupstream: b\nschemas:\n  - {name: pets, file: a.yaml}\n  - {name: pets, \
+            "schemas:\n  - {name: pets, file: a.yaml}\n  - {name: pets, \
              file: b.yaml}\n",
         )
         .unwrap_err();
@@ -774,7 +696,7 @@ token_configurations:
 
         for host in ["api.example.com:8443", "api.example.com.", "", "https://x"] {
             let err = parse(&format!(
-                "listen: a\nupstream: b\nschemas:\n  - {{name: pets, file: a.yaml, hosts: ['{host}']}}\n"
+                "schemas:\n  - {{name: pets, file: a.yaml, hosts: ['{host}']}}\n"
             ))
             .unwrap_err();
             assert!(
@@ -819,7 +741,7 @@ token_configurations:
             "{err}"
         );
 
-        let base = "listen: a\nupstream: b\ntoken_configurations:\n";
+        let base = "token_configurations:\n";
         let err = parse(&format!(
             "{base}  - {{id: x, token_sources: [], credentials: {{keys: []}}}}"
         ))
@@ -845,8 +767,6 @@ token_configurations:
 
         let err = parse(
             r#"
-listen: a
-upstream: b
 rulesets:
   - name: other
   - name: rs
@@ -941,8 +861,6 @@ rulesets:
     fn execute_only_allowed_in_root_ruleset_and_not_as_override_action() {
         let err = parse(
             r#"
-listen: a
-upstream: b
 rulesets:
   - name: other
   - name: rs
