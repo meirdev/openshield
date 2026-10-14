@@ -1992,43 +1992,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "openshield"
+name = "openshield-core"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",
- "async-trait",
  "aws-lc-rs",
  "base64",
  "bytes",
- "chrono",
- "clap",
  "cookie",
- "env_logger",
  "erased-serde",
  "form_urlencoded",
- "futures",
  "hex",
  "hmac",
  "html-escape",
- "http",
  "ip_network",
  "ip_network_table",
  "jsonschema",
  "jsonwebtoken",
- "lazy_static",
- "libc",
  "libinjectionrs",
  "log",
  "matchit",
  "maxminddb",
  "md-5",
- "mimalloc",
  "mime",
- "multer",
- "pingora",
  "pingora-limits",
- "pingora-prometheus",
- "prometheus",
  "regex",
  "reqwest",
  "roxmltree",
@@ -2036,6 +2023,30 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha1",
+ "wirefilter-engine",
+]
+
+[[package]]
+name = "openshield-pingora"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
+ "clap",
+ "env_logger",
+ "form_urlencoded",
+ "http",
+ "lazy_static",
+ "libc",
+ "log",
+ "mimalloc",
+ "multer",
+ "openshield-core",
+ "pingora",
+ "pingora-prometheus",
+ "prometheus",
+ "serde_json",
  "signal-hook",
  "tokio",
  "tokio-stream",

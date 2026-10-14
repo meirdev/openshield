@@ -5,8 +5,8 @@ use tokio::sync::mpsc;
 use wirefilter_engine::ExecutionContext;
 
 use super::metrics::ACTIVE_CONNECTIONS;
-use crate::geoip::GeoIpLookup;
-use crate::waf::schema::SchemaRequest;
+use openshield_core::geoip::GeoIpLookup;
+use openshield_core::waf::schema::SchemaRequest;
 
 pub fn next_request_id() -> String {
     uuid::Uuid::new_v4().to_string()
@@ -44,7 +44,7 @@ impl BodyBuffer {
     }
 }
 
-pub use crate::waf::data::MultipartPartData;
+pub use openshield_core::waf::data::MultipartPartData;
 
 /// A block decision made during a body phase, rendered later (in
 /// `fail_to_proxy` for requests, or as a replacement response body for

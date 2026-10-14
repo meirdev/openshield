@@ -4,6 +4,11 @@
 
 OpenShield is a reverse proxy and Web Application Firewall (WAF) built on [Cloudflare Pingora](https://github.com/cloudflare/pingora) and [Wirefilter](https://github.com/cloudflare/wirefilter).
 
+## Repository layout
+
+- `crates/openshield-core`: the WAF engine as a library (config, rule compiler, evaluation, validators). No proxy or runtime dependencies beyond what the engine itself needs.
+- `crates/openshield-pingora`: the `openshield` reverse-proxy binary built on Pingora, which drives the core.
+
 ## Features
 
 - Rules for request and response headers and bodies
