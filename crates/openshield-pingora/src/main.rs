@@ -1,20 +1,15 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-mod challenge;
-mod compiler;
-mod config;
-mod geoip;
-mod logging;
 mod proxy;
 mod reload;
-mod waf;
 
 use std::sync::Arc;
 
 use clap::Parser;
-use config::Config;
 use log::{error, info};
+use openshield_core::config::Config;
+use openshield_core::{challenge, compiler, geoip, logging, waf};
 use pingora::prelude::*;
 use pingora::proxy::http_proxy_service;
 use pingora::server::configuration::Opt as PingoraOpt;

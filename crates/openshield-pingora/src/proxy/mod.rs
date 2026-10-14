@@ -13,18 +13,18 @@ use metrics::{ACTIVE_CONNECTIONS, BYTES_RECEIVED, BYTES_SENT, TOTAL_REQUESTS};
 use pingora::prelude::*;
 use pingora::proxy::{ProxyHttp, Session};
 
-use crate::challenge::ChallengeManager;
-use crate::config::BodyLimitAction;
-use crate::geoip::GeoIp;
-use crate::logging::{
+use openshield_core::challenge::ChallengeManager;
+use openshield_core::config::BodyLimitAction;
+use openshield_core::geoip::GeoIp;
+use openshield_core::logging::{
     AccessLogEntry, AuditLogEntry, AuditRequest, AuditResponse, Logger, MatchedRule,
 };
-use crate::waf::data::{MultipartPartData, RequestData, ResponseData};
-use crate::waf::engine::{Engine, Phase, RuleAction};
-use crate::waf::jwt::JwtValidator;
-use crate::waf::lists::{self, BytesListMatcher, IpListMatcher};
-use crate::waf::populate;
-use crate::waf::schema::SchemaValidator;
+use openshield_core::waf::data::{MultipartPartData, RequestData, ResponseData};
+use openshield_core::waf::engine::{Engine, Phase, RuleAction};
+use openshield_core::waf::jwt::JwtValidator;
+use openshield_core::waf::lists::{self, BytesListMatcher, IpListMatcher};
+use openshield_core::waf::populate;
+use openshield_core::waf::schema::SchemaValidator;
 
 pub struct ReverseProxyHandler {
     pub detection_only: bool,
@@ -54,7 +54,7 @@ fn evaluate_phase(
     ctx: &mut RequestCtx,
     phase: &Phase,
 ) -> RuleAction {
-    crate::waf::engine::sync_scores(&mut ctx.exec_ctx, &handler.scheme, &ctx.waf_scores);
+    openshield_core::waf::engine::sync_scores(&mut ctx.exec_ctx, &handler.scheme, &ctx.waf_scores);
     let action = handler.engine.evaluate(
         phase,
         &ctx.exec_ctx,
@@ -185,7 +185,10 @@ fn suppress_response_body(body: &mut Option<bytes::Bytes>, ctx: &mut RequestCtx,
     *body = Some(bytes::Bytes::from(content));
 }
 
-fn extract_request_data(session: &Session, geo: &Option<crate::geoip::GeoIpLookup>) -> RequestData {
+fn extract_request_data(
+    session: &Session,
+    geo: &Option<openshield_core::geoip::GeoIpLookup>,
+) -> RequestData {
     let req = session.req_header();
     let headers: Vec<(String, String)> = req
         .headers
@@ -236,7 +239,7 @@ fn extract_request_data(session: &Session, geo: &Option<crate::geoip::GeoIpLooku
         query,
         extension,
         headers,
-        geo: geo.as_ref().map(|g| crate::waf::data::GeoData {
+        geo: geo.as_ref().map(|g| openshield_core::waf::data::GeoData {
             asn: g.as_num,
             city: g.city.clone(),
             continent: g.continent.clone(),
@@ -418,7 +421,7 @@ impl ProxyHttp for ReverseProxyHandler {
             start: Instant::now(),
             geo: None,
             exec_ctx: {
-                let mut ctx = crate::waf::scheme::new_context(&self.scheme);
+                let mut ctx = openshield_core::waf::scheme::new_context(&self.scheme);
                 lists::install(&mut ctx, &self.scheme, &self.ip_lists, &self.bytes_lists);
                 ctx
             },
