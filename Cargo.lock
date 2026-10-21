@@ -1993,7 +1993,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openshield-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aho-corasick",
  "aws-lc-rs",
@@ -2029,7 +2029,7 @@ dependencies = [
 
 [[package]]
 name = "openshield-openapi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cookie",
  "form_urlencoded",
@@ -2044,7 +2044,7 @@ dependencies = [
 
 [[package]]
 name = "openshield-pingora"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "bytes",
