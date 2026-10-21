@@ -140,6 +140,8 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
     // JSON
     b.add_function("lookup_json_string", json::LookupJsonStringFunction)
         .unwrap();
+    b.add_function("lookup_json_integer", json::LookupJsonIntegerFunction)
+        .unwrap();
 
     // JWT
     let token_ids: Arc<[String]> = token_ids.into();

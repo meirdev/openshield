@@ -2,14 +2,11 @@ mod format;
 mod sink;
 
 use std::collections::HashMap;
-
-pub use format::{JsonFormatter, TextFormatter};
-use serde::Serialize;
-pub use sink::{WriterSink, open_writer};
-
 use std::path::PathBuf;
 
-use serde::Deserialize;
+pub use format::{JsonFormatter, TextFormatter};
+use serde::{Deserialize, Serialize};
+pub use sink::{WriterSink, open_writer};
 
 /// Where and how the [`Logger`] writes access and audit logs.
 #[derive(Debug, Clone, Deserialize)]

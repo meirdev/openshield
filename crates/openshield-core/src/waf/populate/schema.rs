@@ -1,8 +1,8 @@
+use openshield_openapi::{Location, Violation};
 use wirefilter_engine::{ExecutionContext, LhsValue, Scheme};
 
 use super::{dedup, set_field};
 use crate::waf::schema::SchemaOutcome;
-use openshield_openapi::{Location, Violation};
 
 pub const PREFIX: &str = "schema_validation";
 

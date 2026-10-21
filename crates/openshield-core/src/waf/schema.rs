@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use log::debug;
+use openshield_openapi::{CompiledSpec, ErrorClass, Location, Match, Unmatched, Violation};
 
 use super::data::RequestData;
 use crate::config;
-use openshield_openapi::{CompiledSpec, ErrorClass, Location, Match, Unmatched, Violation};
 
 struct Schema {
     name: String,

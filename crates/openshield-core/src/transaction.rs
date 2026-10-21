@@ -15,10 +15,8 @@ use crate::firewall::Waf;
 use crate::logging::{AccessLogEntry, AuditLogEntry, AuditRequest, AuditResponse, MatchedRule};
 use crate::waf::data::{GeoData, MultipartPartData, RequestData, ResponseData};
 use crate::waf::engine::{self, Phase, RuleAction};
-use crate::waf::lists;
-use crate::waf::populate;
 use crate::waf::schema::SchemaRequest;
-use crate::waf::scheme;
+use crate::waf::{lists, populate, scheme};
 
 /// The response a rule asked the host to send in place of the proxied one.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -284,11 +284,14 @@ Transforms and detection functions accept a string or an array of strings. Use `
 
 ### JSON
 
-| Function                                     | Description                                    |
-| -------------------------------------------- | ---------------------------------------------- |
-| `lookup_json_string(field, key1, key2, ...)` | Extract a value from a JSON string by key path |
+| Function                                      | Description                                       |
+| --------------------------------------------- | ------------------------------------------------- |
+| `lookup_json_string(field, key1, key2, ...)`  | Extract a value from a JSON string by key path    |
+| `lookup_json_integer(field, key1, key2, ...)` | Extract an integer from a JSON string by key path |
 
-Use string literals for object keys and integer literals for array indexes. The result is a string; invalid JSON or a missing path returns an empty string.
+Use string literals for object keys and integer literals for array indexes.
+
+`lookup_json_string` returns a string; invalid JSON or a missing path returns an empty string. `lookup_json_integer` returns an integer and only accepts plain integers, so `42.0` and `"42"` do not count; invalid JSON, a missing path or a non-integer value produces no value, which compares like an absent field: `==`, `<` and similar are false, and `!=` is true.
 
 ```text
 lookup_json_string(http.request.body.raw, "users", 0, "name") == "alice"

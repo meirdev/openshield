@@ -191,7 +191,8 @@ impl MatchedOperation<'_> {
             .collect()
     }
 
-    /// Check the `Content-Type` and the body; see [`CompiledSpec::validate_body`].
+    /// Check the `Content-Type` and the body; see
+    /// [`CompiledSpec::validate_body`].
     pub fn validate_body(&self, content_type: Option<&str>, body: Option<&[u8]>) -> Vec<Violation> {
         self.spec.validate_body(self.operation, content_type, body)
     }
