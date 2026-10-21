@@ -17,6 +17,7 @@ pub struct RequestData {
 
 pub struct GeoData {
     pub asn: Option<u32>,
+    pub is_in_european_union: bool,
     pub city: Option<String>,
     pub continent: Option<String>,
     pub country: Option<String>,
@@ -47,6 +48,7 @@ impl From<&crate::geoip::GeoIpLookup> for GeoData {
     fn from(g: &crate::geoip::GeoIpLookup) -> Self {
         Self {
             asn: g.as_num,
+            is_in_european_union: g.is_in_european_union,
             city: g.city.clone(),
             continent: g.continent.clone(),
             country: g.country.clone(),

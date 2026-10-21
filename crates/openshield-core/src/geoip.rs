@@ -5,6 +5,7 @@ use maxminddb::{Reader, geoip2};
 #[derive(Clone)]
 pub struct GeoIpLookup {
     pub as_num: Option<u32>,
+    pub is_in_european_union: bool,
     pub as_org: Option<String>,
     pub city: Option<String>,
     pub continent: Option<String>,
@@ -40,6 +41,7 @@ impl GeoIp {
     pub fn lookup(&self, ip: IpAddr) -> GeoIpLookup {
         let mut result = GeoIpLookup {
             as_num: None,
+            is_in_european_union: false,
             as_org: None,
             city: None,
             continent: None,
@@ -65,6 +67,8 @@ impl GeoIp {
                 result.city = city.city.names.english.map(String::from);
                 result.continent = city.continent.code.map(String::from);
                 result.country = city.country.iso_code.map(String::from);
+                result.is_in_european_union =
+                    is_in_european_union(city.country.iso_code, city.country.is_in_european_union);
                 result.lat = city.location.latitude;
                 result.lon = city.location.longitude;
                 result.metro_code = city.location.metro_code;
@@ -79,5 +83,42 @@ impl GeoIp {
         }
 
         result
+    }
+}
+
+/// Country and territory codes that count as the European Union
+pub const EU_COUNTRY_CODES: &[&str] = &[
+    "AT", "AX", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GF", "GP", "GR", "HR",
+    "HU", "IE", "IT", "LT", "LU", "LV", "MF", "MQ", "MT", "NL", "PL", "PT", "RE", "RO", "SE", "SI",
+    "SK", "YT",
+];
+
+pub fn is_in_european_union(iso_code: Option<&str>, maxmind_flag: Option<bool>) -> bool {
+    maxmind_flag.unwrap_or(false) || iso_code.is_some_and(|code| EU_COUNTRY_CODES.contains(&code))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn member_states_and_outermost_regions_are_eu() {
+        assert!(is_in_european_union(Some("DE"), Some(true)));
+        assert!(is_in_european_union(Some("DE"), None));
+        assert!(is_in_european_union(Some("RE"), Some(false)));
+        assert!(is_in_european_union(Some("YT"), None));
+    }
+
+    #[test]
+    fn others_are_not() {
+        assert!(!is_in_european_union(Some("GB"), Some(false)));
+        assert!(!is_in_european_union(Some("CH"), None));
+        assert!(!is_in_european_union(Some("US"), None));
+        assert!(!is_in_european_union(None, None));
+    }
+
+    #[test]
+    fn maxmind_flag_wins_even_for_unlisted_codes() {
+        assert!(is_in_european_union(Some("XX"), Some(true)));
     }
 }

@@ -312,7 +312,7 @@ Fields become available as the request moves through the phases. GeoIP fields re
 
 ### IP and GeoIP
 
-`ip.src`, `ip.src.asnum`, `ip.src.city`, `ip.src.continent`, `ip.src.country`, `ip.src.lat`, `ip.src.lon`, `ip.src.metro_code`, `ip.src.postal_code`, `ip.src.region`, `ip.src.region_code`, `ip.src.timezone.name`
+`ip.src`, `ip.src.asnum`, `ip.src.city`, `ip.src.continent`, `ip.src.country`, `ip.src.is_in_european_union`, `ip.src.lat`, `ip.src.lon`, `ip.src.metro_code`, `ip.src.postal_code`, `ip.src.region`, `ip.src.region_code`, `ip.src.timezone.name`
 
 ### Request
 

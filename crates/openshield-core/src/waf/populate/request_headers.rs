@@ -38,6 +38,13 @@ pub fn request_fields(ctx: &mut ExecutionContext<'static>, scheme: &Scheme, req:
         if let Some(ref v) = g.country {
             set_field!(ctx, scheme, "ip.src.country", Str, v);
         }
+        set_field!(
+            ctx,
+            scheme,
+            "ip.src.is_in_european_union",
+            Bool,
+            g.is_in_european_union
+        );
         if let Some(ref v) = g.postal_code {
             set_field!(ctx, scheme, "ip.src.postal_code", Str, v);
         }
@@ -322,5 +329,38 @@ mod tests {
             &ctx,
             r#"http.request.body.mime == "application/json""#
         ));
+    }
+
+    #[test]
+    fn eu_flag_follows_geo_data() {
+        use crate::waf::data::GeoData;
+        let geo = |country: &str, eu: bool| GeoData {
+            asn: None,
+            is_in_european_union: eu,
+            city: None,
+            continent: None,
+            country: Some(country.into()),
+            lat: None,
+            lon: None,
+            metro_code: None,
+            postal_code: None,
+            region: None,
+            region_code: None,
+            timezone: None,
+        };
+
+        let mut req = empty_request();
+        req.geo = Some(geo("FR", true));
+        let (scheme, ctx) = populate(&req);
+        assert!(check(&scheme, &ctx, "ip.src.is_in_european_union"));
+        assert!(check(
+            &scheme,
+            &ctx,
+            r#"ip.src.country == "FR" and ip.src.is_in_european_union"#
+        ));
+
+        req.geo = Some(geo("GB", false));
+        let (scheme, ctx) = populate(&req);
+        assert!(check(&scheme, &ctx, "not ip.src.is_in_european_union"));
     }
 }

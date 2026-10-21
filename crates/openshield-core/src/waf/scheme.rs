@@ -63,6 +63,7 @@ pub fn build(score_names: &[String], token_ids: &[String]) -> Scheme {
     opt!(b, "ip.src.city", Str);
     opt!(b, "ip.src.continent", Str);
     opt!(b, "ip.src.country", Str);
+    opt!(b, "ip.src.is_in_european_union", Bool);
     opt!(b, "ip.src.lat", Str);
     opt!(b, "ip.src.lon", Str);
     opt!(b, "ip.src.metro_code", Str);
