@@ -2009,25 +2009,37 @@ dependencies = [
  "html-escape",
  "ip_network",
  "ip_network_table",
- "jsonschema",
  "jsonwebtoken",
  "libinjectionrs",
  "log",
- "matchit",
  "maxminddb",
  "md-5",
- "mime",
  "multer",
+ "openshield-openapi",
  "pingora-limits",
  "regex",
  "reqwest",
- "roxmltree",
  "serde",
  "serde_json",
  "serde_yaml",
  "sha1",
  "uuid",
  "wirefilter-engine",
+]
+
+[[package]]
+name = "openshield-openapi"
+version = "0.1.0"
+dependencies = [
+ "cookie",
+ "form_urlencoded",
+ "jsonschema",
+ "matchit",
+ "mime",
+ "roxmltree",
+ "serde",
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]

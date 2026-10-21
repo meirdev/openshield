@@ -70,7 +70,7 @@ fn prunes_prefix_items() {
     assert_valid(validate(&spec, json!([{}])));
 }
 
-fn referenced_product() -> crate::waf::openapi::CompiledSpec {
+fn referenced_product() -> crate::CompiledSpec {
     compile(
         "3.1.0",
         json!({"$ref": "#/components/schemas/Product"}),

@@ -5,11 +5,11 @@
 use serde_json::{Value, json};
 
 use super::common::*;
-use crate::waf::openapi::error::ErrorClass;
+use crate::error::ErrorClass;
 
 const XML: &str = "application/xml";
 
-fn xml_spec(schema: Value) -> crate::waf::openapi::CompiledSpec {
+fn xml_spec(schema: Value) -> crate::CompiledSpec {
     // Upstream extracts these schemas from responses. Our API validates
     // requests, so mount the same schemas as required request bodies.
     compile_media("3.0.0", XML, json!({"schema": schema}), json!({}))
@@ -52,7 +52,7 @@ fn with_attributes() {
     ));
 }
 
-fn age_spec() -> crate::waf::openapi::CompiledSpec {
+fn age_spec() -> crate::CompiledSpec {
     xml_spec(
         json!({"type": "object", "properties": {"age": {"type": "integer"}}, "xml": {"name": "Cat"}}),
     )
@@ -72,7 +72,7 @@ fn type_validation_invalid_integer() {
     ));
 }
 
-fn wrapped_array_spec() -> crate::waf::openapi::CompiledSpec {
+fn wrapped_array_spec() -> crate::CompiledSpec {
     xml_spec(json!({"type": "object", "properties": {"pets": {
         "type": "array", "xml": {"wrapped": true}, "items": {
             "type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
@@ -113,7 +113,7 @@ fn multiple_properties_with_custom_names() {
     ));
 }
 
-fn product_spec() -> crate::waf::openapi::CompiledSpec {
+fn product_spec() -> crate::CompiledSpec {
     xml_spec(
         json!({"type": "object", "required": ["productId", "name"], "properties": {
         "productId": {"type": "integer"}, "name": {"type": "string"}, "description": {"type": "string"}
@@ -332,7 +332,7 @@ fn no_properties() {
     ));
 }
 
-fn namespace_spec() -> crate::waf::openapi::CompiledSpec {
+fn namespace_spec() -> crate::CompiledSpec {
     // getXmlTestSchema: normalize the shorthand upstream version 3.1 to 3.1.0.
     compile_media(
         "3.1.0",

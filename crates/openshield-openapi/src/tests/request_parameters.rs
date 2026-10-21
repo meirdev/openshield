@@ -9,8 +9,8 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::waf::openapi::error::{ErrorClass, Unmatched, ValidationResult};
-use crate::waf::openapi::{CompiledSpec, Match, Request, validate_request};
+use crate::error::{ErrorClass, Unmatched, ValidationResult};
+use crate::{CompiledSpec, Match, Request, validate_request};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

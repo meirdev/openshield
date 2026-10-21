@@ -11,8 +11,8 @@ use super::common::{
     assert_error_paths, assert_schema_invalid, assert_valid, compile, compile_media,
     is_schema_class, validate,
 };
-use crate::waf::openapi::error::{ErrorClass, Location, ValidationResult, Violation};
-use crate::waf::openapi::{CompiledSpec, Request, validate_request};
+use crate::error::{ErrorClass, Location, ValidationResult, Violation};
+use crate::{CompiledSpec, Request, validate_request};
 
 const BURGER_PATH: &str = "/burgers/createBurger";
 const GOOD: &str = r#"{"name":"Big Mac","patties":2,"vegetarian":true}"#;

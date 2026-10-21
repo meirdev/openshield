@@ -3,7 +3,6 @@ pub mod engine;
 pub mod functions;
 pub mod jwt;
 pub mod lists;
-pub mod openapi;
 pub mod payload;
 pub mod populate;
 pub mod ratelimit;

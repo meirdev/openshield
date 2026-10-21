@@ -131,7 +131,6 @@ impl Violation {
         }
     }
 
-    #[cfg(test)]
     pub fn http_status(&self) -> u16 {
         match self.class {
             ErrorClass::InvalidMediaType | ErrorClass::UnsupportedMediaType => 415,
@@ -187,7 +186,6 @@ pub enum Unmatched {
 }
 
 impl Unmatched {
-    #[cfg(test)]
     pub fn http_status(&self) -> u16 {
         match self {
             Self::Path => 404,
@@ -197,7 +195,6 @@ impl Unmatched {
 }
 
 /// The outcome of validating a whole request; see `validate_request`.
-#[cfg(test)]
 #[derive(Debug)]
 pub enum ValidationResult {
     Valid,
@@ -205,7 +202,6 @@ pub enum ValidationResult {
     Invalid(Vec<Violation>),
 }
 
-#[cfg(test)]
 impl ValidationResult {
     pub fn is_valid(&self) -> bool {
         matches!(self, Self::Valid)

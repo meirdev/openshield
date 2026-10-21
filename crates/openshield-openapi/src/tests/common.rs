@@ -2,8 +2,8 @@
 
 use serde_json::{Value, json};
 
-use crate::waf::openapi::error::{ErrorClass, Location, ValidationResult, Violation};
-use crate::waf::openapi::{CompiledSpec, Request, validate_request};
+use crate::error::{ErrorClass, Location, ValidationResult, Violation};
+use crate::{CompiledSpec, Request, validate_request};
 
 pub fn document(version: &str, media_type: &str, media: Value, schemas: Value) -> Value {
     json!({

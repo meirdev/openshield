@@ -106,3 +106,5 @@ schema_validation.violation_details.location == "query"
 ratelimit:
   characteristics: [ip.src, schema_validation.operation.template]
 ```
+
+The validator itself is the standalone `openshield-openapi` crate in this repository and can be used outside the proxy.

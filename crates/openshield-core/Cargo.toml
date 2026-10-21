@@ -8,6 +8,7 @@ edition.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+openshield-openapi.workspace = true
 wirefilter-engine.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -32,10 +33,6 @@ hex.workspace = true
 hmac.workspace = true
 md-5.workspace = true
 jsonwebtoken.workspace = true
-jsonschema.workspace = true
-matchit.workspace = true
-mime.workspace = true
-roxmltree.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 multer.workspace = true

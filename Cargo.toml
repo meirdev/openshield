@@ -1,12 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/openshield-core", "crates/openshield-pingora"]
+members = ["crates/openshield-openapi", "crates/openshield-core", "crates/openshield-pingora"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+openshield-openapi = { path = "crates/openshield-openapi" }
 openshield-core = { path = "crates/openshield-core" }
 
 wirefilter-engine = { git = "https://github.com/cloudflare/wirefilter.git", branch = "master", package = "wirefilter-engine" }
