@@ -1,0 +1,16 @@
+[package]
+name = "openshield-openapi"
+description = "Validate HTTP requests against an OpenAPI 3.0 or 3.1 document"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+jsonschema.workspace = true
+matchit.workspace = true
+mime.workspace = true
+roxmltree.workspace = true
+form_urlencoded.workspace = true
+cookie.workspace = true

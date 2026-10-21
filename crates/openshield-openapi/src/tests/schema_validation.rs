@@ -5,8 +5,8 @@
 use serde_json::{Value, json};
 
 use super::common::*;
-use crate::waf::openapi::CompiledSpec;
-use crate::waf::openapi::error::{ErrorClass, SpecError};
+use crate::CompiledSpec;
+use crate::error::{ErrorClass, SpecError};
 
 fn burger_schema() -> Value {
     json!({"type": "object", "properties": {

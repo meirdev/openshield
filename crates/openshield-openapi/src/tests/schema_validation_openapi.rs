@@ -7,7 +7,7 @@
 use serde_json::json;
 
 use super::common::*;
-use crate::waf::openapi::CompiledSpec;
+use crate::CompiledSpec;
 
 #[test]
 fn nullable_keyword_openapi30_success() {
@@ -77,10 +77,7 @@ fn v3_0_numeric_exclusive_minimum_rejected() {
         json!({}),
     );
     match CompiledSpec::from_json(&doc.to_string()) {
-        Err(
-            crate::waf::openapi::error::SpecError::Parse(_)
-            | crate::waf::openapi::error::SpecError::SchemaCompile(_),
-        ) => {}
+        Err(crate::error::SpecError::Parse(_) | crate::error::SpecError::SchemaCompile(_)) => {}
         Err(error) => panic!("unexpected compilation error: {error}"),
         Ok(spec) => {
             assert_schema_invalid(validate(&spec, json!({"amount": 3})));

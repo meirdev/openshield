@@ -6,6 +6,7 @@ OpenShield is a reverse proxy and Web Application Firewall (WAF) built on [Cloud
 
 ## Repository layout
 
+- `crates/openshield-openapi`: a standalone validator of HTTP requests against OpenAPI 3.0 and 3.1 documents. Usable without the rest of OpenShield.
 - `crates/openshield-core`: the WAF engine as a library. A host builds a `Waf` from the config, starts a `Transaction` per request, feeds it headers and body chunks phase by phase, and acts on the verdicts it returns.
 - `crates/openshield-pingora`: the `openshield` reverse-proxy binary built on Pingora, which drives the core.
 

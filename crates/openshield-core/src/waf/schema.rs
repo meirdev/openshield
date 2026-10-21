@@ -3,8 +3,8 @@ use std::path::Path;
 use log::debug;
 
 use super::data::RequestData;
-use super::openapi::{CompiledSpec, ErrorClass, Location, Match, Unmatched, Violation};
 use crate::config;
+use openshield_openapi::{CompiledSpec, ErrorClass, Location, Match, Unmatched, Violation};
 
 struct Schema {
     name: String,
@@ -183,7 +183,7 @@ fn host_name(host: &str) -> String {
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    use super::super::openapi::CompiledSpec;
+    use openshield_openapi::CompiledSpec;
 
     /// A pet store: `GET /pets?limit`, `POST /pets?dry_run` with a JSON body
     /// and `GET /pets/{id}`, served under `/v1`.

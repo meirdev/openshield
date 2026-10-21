@@ -5,7 +5,7 @@
 use serde_json::json;
 
 use super::common::*;
-use crate::waf::openapi::error::ErrorClass;
+use crate::error::ErrorClass;
 
 const FORM: &str = "application/x-www-form-urlencoded";
 

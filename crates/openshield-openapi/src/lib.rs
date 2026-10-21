@@ -1,5 +1,7 @@
 //! Validation of HTTP requests against an OpenAPI 3.0.x or 3.1.x document.
 //!
+//! Standalone: no dependency on the rest of OpenShield.
+//!
 //! A [`CompiledSpec`] is built once from the document. Per request,
 //! [`CompiledSpec::match_operation`] finds the operation, then
 //! [`MatchedOperation::validate_parameters`] checks the path, query, header
@@ -19,9 +21,7 @@ mod spec;
 mod tests;
 mod xml;
 
-#[cfg(test)]
-pub use error::ValidationResult;
-pub use error::{ErrorClass, Location, Unmatched, Violation};
+pub use error::{ErrorClass, Location, Unmatched, ValidationResult, Violation};
 pub use spec::{CompiledOperation, CompiledSpec};
 
 /// The outcome of looking up a request's operation.
@@ -192,14 +192,12 @@ impl MatchedOperation<'_> {
     }
 
     /// Check the `Content-Type` and the body; see [`CompiledSpec::validate_body`].
-    #[cfg(test)]
     pub fn validate_body(&self, content_type: Option<&str>, body: Option<&[u8]>) -> Vec<Violation> {
         self.spec.validate_body(self.operation, content_type, body)
     }
 }
 
 /// A whole request, for validating in one step.
-#[cfg(test)]
 pub struct Request<'a> {
     pub method: &'a str,
     pub path: &'a str,
@@ -208,7 +206,6 @@ pub struct Request<'a> {
     pub body: Option<&'a [u8]>,
 }
 
-#[cfg(test)]
 pub fn validate_request(spec: &CompiledSpec, request: &Request<'_>) -> ValidationResult {
     let operation = match spec.match_operation(request.method, request.path) {
         Match::Operation(operation) => operation,
@@ -224,7 +221,6 @@ pub fn validate_request(spec: &CompiledSpec, request: &Request<'_>) -> Validatio
     }
 }
 
-#[cfg(test)]
 fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
     headers
         .iter()
