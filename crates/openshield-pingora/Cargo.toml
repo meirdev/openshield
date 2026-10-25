@@ -26,3 +26,4 @@ http.workspace = true
 mimalloc.workspace = true
 pingora-prometheus.workspace = true
 libc.workspace = true
+reqwest.workspace = true

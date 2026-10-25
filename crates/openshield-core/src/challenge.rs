@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hmac::{Hmac, KeyInit, Mac};
-use log::{debug, warn};
+use log::debug;
 use sha1::Sha1;
 
 use crate::config::ChallengeConfig;
@@ -11,6 +11,17 @@ type HmacSha1 = Hmac<Sha1>;
 pub struct ChallengeManager {
     config: ChallengeConfig,
     challenge_page: String,
+}
+
+/// Cloudflare's endpoint for checking a Turnstile token.
+pub const TURNSTILE_VERIFY_URL: &str = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
+/// The `application/x-www-form-urlencoded` POST the host sends to
+/// [`TURNSTILE_VERIFY_URL`]. The core does no network I/O itself, so each
+/// runtime performs the request its own way.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TurnstileRequest {
+    pub form: Vec<(&'static str, String)>,
 }
 
 /// Fields of the form the challenge page posts back.
@@ -79,40 +90,32 @@ impl ChallengeManager {
         method == "POST" && path == self.config.challenge_path
     }
 
-    /// Verify a Turnstile token with Cloudflare's API.
-    pub async fn verify_turnstile(&self, token: &str, client_ip: &str) -> bool {
-        let client = reqwest::Client::new();
-        let resp = client
-            .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
-            .form(&[
-                ("secret", self.config.turnstile_secret_key.as_str()),
-                ("response", token),
-                ("remoteip", client_ip),
-            ])
-            .send()
-            .await;
-
-        match resp {
-            Ok(r) => {
-                if let Ok(body) = r.json::<serde_json::Value>().await {
-                    let success = body
-                        .get("success")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    if !success {
-                        debug!("Turnstile verification failed: {:?}", body);
-                    }
-                    success
-                } else {
-                    warn!("Failed to parse Turnstile response");
-                    false
-                }
-            }
-            Err(e) => {
-                warn!("Turnstile API request failed: {}", e);
-                false
-            }
+    /// The request that verifies `token` for a visitor at `client_ip`.
+    pub fn turnstile_request(&self, token: &str, client_ip: &str) -> TurnstileRequest {
+        TurnstileRequest {
+            form: vec![
+                ("secret", self.config.turnstile_secret_key.clone()),
+                ("response", token.to_string()),
+                ("remoteip", client_ip.to_string()),
+            ],
         }
+    }
+
+    /// Whether Cloudflare's JSON answer to a [`TurnstileRequest`] confirms
+    /// the token.
+    pub fn turnstile_verified(&self, response_body: &[u8]) -> bool {
+        let Ok(body) = serde_json::from_slice::<serde_json::Value>(response_body) else {
+            debug!("Turnstile response is not JSON");
+            return false;
+        };
+        let success = body
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if !success {
+            debug!("Turnstile verification failed: {:?}", body);
+        }
+        success
     }
 
     /// Create a signed challenge cookie value.
@@ -256,4 +259,68 @@ fn default_challenge_page(site_key: &str, challenge_path: &str) -> String {
 </body>
 </html>"#
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manager() -> ChallengeManager {
+        ChallengeManager::new(&ChallengeConfig {
+            turnstile_site_key: "site".into(),
+            turnstile_secret_key: "s3cret".into(),
+            cookie_secret: "cookie-secret".into(),
+            cookie_ttl: 60,
+            cookie_name: "oss_challenge".into(),
+            challenge_path: "/__openshield/challenge".into(),
+            custom_page: None,
+        })
+    }
+
+    #[test]
+    fn turnstile_request_carries_secret_token_and_ip() {
+        let request = manager().turnstile_request("tok", "203.0.113.9");
+        assert_eq!(
+            request.form,
+            [
+                ("secret", "s3cret".to_string()),
+                ("response", "tok".to_string()),
+                ("remoteip", "203.0.113.9".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn turnstile_response_is_judged_by_success() {
+        let m = manager();
+        assert!(m.turnstile_verified(br#"{"success": true, "hostname": "example.com"}"#));
+        assert!(
+            !m.turnstile_verified(
+                br#"{"success": false, "error-codes": ["timeout-or-duplicate"]}"#
+            )
+        );
+        assert!(!m.turnstile_verified(br#"{"hostname": "example.com"}"#));
+        assert!(!m.turnstile_verified(b"<html>502</html>"));
+        assert!(!m.turnstile_verified(b""));
+    }
+
+    #[test]
+    fn verification_form_parses_token_and_redirect() {
+        let form = VerificationForm::parse(b"cf-turnstile-response=tok&redirect=%2Fnext&other=x");
+        assert_eq!(form.token.as_deref(), Some("tok"));
+        assert_eq!(form.redirect.as_deref(), Some("/next"));
+        assert_eq!(VerificationForm::parse(b""), VerificationForm::default());
+    }
+
+    #[test]
+    fn cookie_round_trips_for_the_same_ip_only() {
+        let m = manager();
+        let set_cookie = m.create_cookie("203.0.113.9");
+        let value = set_cookie.split(';').next().unwrap();
+        let header = Some(value);
+        assert!(m.is_verified(header, "203.0.113.9"));
+        assert!(!m.is_verified(header, "203.0.113.10"));
+        assert!(!m.is_verified(Some("oss_challenge=garbage"), "203.0.113.9"));
+        assert!(!m.is_verified(None, "203.0.113.9"));
+    }
 }

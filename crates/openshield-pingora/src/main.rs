@@ -116,9 +116,14 @@ fn main() {
     let mut server = Server::new_with_opt_and_conf(Some(pingora_opt), conf);
     server.bootstrap();
 
+    let http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .expect("HTTP client");
     let handler = proxy::ReverseProxyHandler {
         waf,
         logger,
+        http_client,
         upstream_tls,
         upstream_host,
         upstream_port,

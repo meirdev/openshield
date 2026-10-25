@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use context::RequestCtx;
+use log::warn;
 use metrics::{ACTIVE_CONNECTIONS, BYTES_RECEIVED, BYTES_SENT, TOTAL_REQUESTS};
-use openshield_core::challenge::{ChallengeManager, VerificationForm};
+use openshield_core::challenge::{ChallengeManager, TURNSTILE_VERIFY_URL, VerificationForm};
 use openshield_core::logging::Logger;
 use openshield_core::waf::data::{RequestData, ResponseData};
 use openshield_core::{BodyVerdict, Intervention, ResponseOutcome, Verdict, Waf};
@@ -18,6 +19,7 @@ use pingora::proxy::{ProxyHttp, Session};
 pub struct ReverseProxyHandler {
     pub waf: Arc<Waf>,
     pub logger: Arc<Logger>,
+    pub http_client: reqwest::Client,
     pub upstream_tls: bool,
     pub upstream_host: String,
     pub upstream_port: u16,
@@ -125,6 +127,31 @@ fn client_ip(session: &Session) -> Option<IpAddr> {
 }
 
 impl ReverseProxyHandler {
+    /// Ask Cloudflare whether a Turnstile token is genuine. Network errors
+    /// and timeouts count as not verified.
+    async fn verify_turnstile(&self, cm: &ChallengeManager, token: &str, client_ip: &str) -> bool {
+        let request = cm.turnstile_request(token, client_ip);
+        let response = self
+            .http_client
+            .post(TURNSTILE_VERIFY_URL)
+            .form(&request.form)
+            .send()
+            .await;
+        match response {
+            Ok(response) => match response.bytes().await {
+                Ok(body) => cm.turnstile_verified(&body),
+                Err(e) => {
+                    warn!("Failed to read Turnstile response: {}", e);
+                    false
+                }
+            },
+            Err(e) => {
+                warn!("Turnstile API request failed: {}", e);
+                false
+            }
+        }
+    }
+
     async fn handle_challenge_verify(
         &self,
         session: &mut Session,
@@ -151,7 +178,7 @@ impl ReverseProxyHandler {
             .unwrap_or_default();
 
         if let Some(token) = form.token.as_deref()
-            && cm.verify_turnstile(token, &client_ip_str).await
+            && self.verify_turnstile(cm, token, &client_ip_str).await
         {
             // Verification passed: set cookie and redirect
             let cookie = cm.create_cookie(&client_ip_str);
