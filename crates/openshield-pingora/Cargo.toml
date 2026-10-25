@@ -12,6 +12,7 @@ path = "src/main.rs"
 openshield-core.workspace = true
 
 serde.workspace = true
+serde_json.workspace = true
 serde_yaml.workspace = true
 clap.workspace = true
 pingora.workspace = true
@@ -27,3 +28,7 @@ mimalloc.workspace = true
 pingora-prometheus.workspace = true
 libc.workspace = true
 reqwest.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+jsonwebtoken.workspace = true

@@ -31,9 +31,9 @@ Access and audit logs share a `request_id` so you can trace a WAF decision to it
 
 Audit entries are written when rules match with logging enabled. Set `logging.enabled: false` on an individual rule to omit its match. Set the top-level `log_payloads: true` to include field values referenced by matched rules.
 
-Configure output paths and JSON or text formatting in [configuration](configuration.md#logs-and-metrics). To extend logging in code, implement `LogSink` or `Formatter`.
+The access log is the proxy's and includes the WAF action and matched rule IDs; the audit log is written by the WAF core itself, so it is the same whichever server hosts it. Configure output paths and JSON or text formatting in [configuration](configuration.md#logs-and-metrics). To send audit entries elsewhere in code, implement `AuditSink`; to change their shape, implement `Formatter`.
 
-Application logs use `RUST_LOG`, which defaults to `openshield=info,pingora=info`. For debug output from OpenShield:
+Application logs use `RUST_LOG`, which defaults to `openshield=<logging.level>,pingora=info`. For debug output from OpenShield:
 
 ```bash
 RUST_LOG=openshield=debug,pingora=info ./target/release/openshield -c config.yaml

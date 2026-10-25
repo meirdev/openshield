@@ -10,6 +10,7 @@ use crate::challenge::ChallengeManager;
 use crate::compiler;
 use crate::config::{BodyLimitAction, WafConfig};
 use crate::geoip::GeoIp;
+use crate::logging::{AuditLog, AuditSink};
 use crate::transaction::Transaction;
 use crate::waf::engine::{Engine, Phase};
 use crate::waf::jwt::JwtValidator;
@@ -55,12 +56,17 @@ pub struct Waf {
     pub(crate) bytes_lists: BytesListMatcher,
     pub(crate) geoip: Option<GeoIp>,
     pub(crate) challenge: Option<ChallengeManager>,
+    pub(crate) audit_log: AuditLog,
     pub(crate) settings: Settings,
     pub(crate) has_request_body_rules: bool,
     pub(crate) has_response_body_rules: bool,
 }
 
 impl Waf {
+    pub fn add_audit_sink(&mut self, sink: Box<dyn AuditSink>) {
+        self.audit_log.add_sink(sink);
+    }
+
     pub fn from_config(config: &WafConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let geoip = match config.geoip.as_ref() {
             Some(geo_cfg) => {
@@ -105,6 +111,18 @@ impl Waf {
             ChallengeManager::new(cfg)
         });
 
+        let audit_log = AuditLog::new(&config.audit_log).map_err(|e| {
+            format!(
+                "failed to open audit log {}: {e}",
+                config.audit_log.path.display()
+            )
+        })?;
+        info!(
+            "Audit log: {} ({:?})",
+            config.audit_log.path.display(),
+            config.audit_log.format
+        );
+
         if config.detection_only {
             info!("Detection-only mode: rules evaluate but no requests will be blocked");
         }
@@ -121,6 +139,7 @@ impl Waf {
             bytes_lists,
             geoip,
             challenge,
+            audit_log,
             settings: Settings::from(config),
             has_request_body_rules,
             has_response_body_rules,

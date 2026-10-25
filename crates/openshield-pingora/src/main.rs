@@ -1,6 +1,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+mod access_log;
 mod config;
 mod proxy;
 mod reload;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use clap::Parser;
 use config::ServerConfig;
 use log::{error, info};
-use openshield_core::{Waf, logging};
+use openshield_core::Waf;
 use pingora::prelude::*;
 use pingora::proxy::http_proxy_service;
 use pingora::server::configuration::Opt as PingoraOpt;
@@ -50,21 +51,22 @@ fn parse_upstream(addr: &str) -> (String, u16, bool) {
 }
 
 fn main() {
-    env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("openshield=info,pingora=info"),
-    )
-    .format_timestamp_millis()
-    .init();
-
     let cli = Cli::parse();
 
     let config = match ServerConfig::load(&cli.config) {
         Ok(c) => c,
         Err(e) => {
-            error!("Failed to load config from {:?}: {}", cli.config, e);
+            eprintln!("Failed to load config from {:?}: {}", cli.config, e);
             std::process::exit(1);
         }
     };
+
+    env_logger::Builder::from_env(
+        env_logger::Env::default()
+            .default_filter_or(format!("openshield={},pingora=info", config.logging.level)),
+    )
+    .format_timestamp_millis()
+    .init();
     info!("Config loaded from {:?}", cli.config);
 
     let waf = match Waf::from_config(&config.waf) {
@@ -75,11 +77,21 @@ fn main() {
         }
     };
 
-    // Logger
-    let logger = Arc::new(logging::Logger::new(&config.logging));
+    // Access log
+    let access_log =
+        match access_log::AccessLog::open(&config.logging.access_log, config.logging.format) {
+            Ok(log) => Arc::new(log),
+            Err(e) => {
+                error!(
+                    "Failed to open access log {:?}: {}",
+                    config.logging.access_log, e
+                );
+                std::process::exit(1);
+            }
+        };
     info!(
-        "Logging: access={:?}, audit={:?}, format={}",
-        config.logging.access_log, config.logging.audit_log, config.logging.format
+        "Access log: {:?} ({:?})",
+        config.logging.access_log, config.logging.format
     );
 
     // Upstream
@@ -122,7 +134,7 @@ fn main() {
         .expect("HTTP client");
     let handler = proxy::ReverseProxyHandler {
         waf,
-        logger,
+        access_log,
         http_client,
         upstream_tls,
         upstream_host,

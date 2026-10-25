@@ -48,6 +48,9 @@ pub struct WafConfig {
     pub schemas: Vec<SchemaConfig>,
 
     #[serde(default)]
+    pub audit_log: crate::logging::AuditLogConfig,
+
+    #[serde(default)]
     pub rulesets: Vec<RulesetConfig>,
 }
 

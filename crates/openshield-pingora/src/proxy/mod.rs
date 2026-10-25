@@ -10,7 +10,6 @@ use context::RequestCtx;
 use log::warn;
 use metrics::{ACTIVE_CONNECTIONS, BYTES_RECEIVED, BYTES_SENT, TOTAL_REQUESTS};
 use openshield_core::challenge::{ChallengeManager, TURNSTILE_VERIFY_URL, VerificationForm};
-use openshield_core::logging::Logger;
 use openshield_core::waf::data::{RequestData, ResponseData};
 use openshield_core::{BodyVerdict, Intervention, ResponseOutcome, Verdict, Waf};
 use pingora::prelude::*;
@@ -18,7 +17,7 @@ use pingora::proxy::{ProxyHttp, Session};
 
 pub struct ReverseProxyHandler {
     pub waf: Arc<Waf>,
-    pub logger: Arc<Logger>,
+    pub access_log: Arc<crate::access_log::AccessLog>,
     pub http_client: reqwest::Client,
     pub upstream_tls: bool,
     pub upstream_host: String,
@@ -391,14 +390,11 @@ impl ProxyHttp for ReverseProxyHandler {
         let status = written.map(|r| r.status.as_u16()).unwrap_or(0);
         let headers = written.map(|r| header_pairs(&r.headers));
 
-        let record = ctx.tx.finish(ResponseOutcome {
+        let summary = ctx.tx.finish(ResponseOutcome {
             status,
             headers: headers.as_deref(),
             error: error.map(|e| e.to_string()),
         });
-        self.logger.access(&record.access);
-        if let Some(audit) = record.audit {
-            self.logger.audit(&audit);
-        }
+        self.access_log.write(&summary);
     }
 }

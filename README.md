@@ -51,6 +51,8 @@ Check the configuration, then start the proxy:
 
 Send requests to `http://127.0.0.1:8080`. This rule returns `403` when it detects SQL injection in a query argument. Other requests are forwarded to your application.
 
+For a configuration that uses every feature, with an application to run it against, see [examples/](examples/).
+
 ## Documentation
 
 - [Configuration](docs/configuration.md): settings, defaults, and optional services

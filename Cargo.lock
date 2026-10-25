@@ -2050,6 +2050,7 @@ dependencies = [
  "clap",
  "env_logger",
  "http",
+ "jsonwebtoken",
  "lazy_static",
  "libc",
  "log",
@@ -2060,8 +2061,10 @@ dependencies = [
  "prometheus",
  "reqwest",
  "serde",
+ "serde_json",
  "serde_yaml",
  "signal-hook",
+ "tokio",
 ]
 
 [[package]]

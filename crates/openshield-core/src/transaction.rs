@@ -8,11 +8,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use serde::Serialize;
 use wirefilter_engine::ExecutionContext;
 
 use crate::config::BodyLimitAction;
 use crate::firewall::Waf;
-use crate::logging::{AccessLogEntry, AuditLogEntry, AuditRequest, AuditResponse, MatchedRule};
+use crate::logging::{AuditLogEntry, AuditRequest, AuditResponse, MatchedRule};
 use crate::waf::data::{GeoData, MultipartPartData, RequestData, ResponseData};
 use crate::waf::engine::{self, Phase, RuleAction};
 use crate::waf::schema::SchemaRequest;
@@ -68,11 +69,29 @@ pub struct ResponseOutcome<'a> {
     pub error: Option<String>,
 }
 
-/// Log entries produced when a transaction finishes.
-pub struct LogRecord {
-    pub access: AccessLogEntry,
-    /// Present only when at least one rule matched with logging enabled.
-    pub audit: Option<AuditLogEntry>,
+/// What a finished transaction amounted to, for the host's access log or
+/// log variables. The audit entry, when rules matched, has already been
+/// written by the core.
+#[derive(Debug, Clone, Serialize)]
+pub struct TransactionSummary {
+    pub request_id: String,
+    pub timestamp: String,
+    pub client_ip: String,
+    pub method: String,
+    pub protocol: String,
+    pub host: String,
+    pub path: String,
+    pub query: String,
+    pub status: u16,
+    pub duration_ms: f64,
+    pub bytes_received: usize,
+    pub bytes_sent: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// `pass`, `block`, `allow` or `challenge`.
+    pub waf_action: String,
+    /// IDs of the rules that matched with logging enabled.
+    pub waf_matched_rules: Vec<String>,
 }
 
 /// Buffered body with size tracking and truncation at a limit.
@@ -381,8 +400,9 @@ impl Transaction {
         BodyVerdict::Hold
     }
 
-    /// Logging phase. Runs the `logging` rules and builds the log entries.
-    pub fn finish(&mut self, outcome: ResponseOutcome<'_>) -> LogRecord {
+    /// Logging phase. Runs the `logging` rules, writes the audit entry if any
+    /// rule matched, and summarizes the transaction for the host.
+    pub fn finish(&mut self, outcome: ResponseOutcome<'_>) -> TransactionSummary {
         self.evaluate(&Phase::Logging);
 
         let elapsed = self.start.elapsed();
@@ -413,7 +433,7 @@ impl Transaction {
             ),
         };
 
-        let access = AccessLogEntry {
+        let summary = TransactionSummary {
             request_id: self.id.clone(),
             timestamp: timestamp.clone(),
             client_ip: client_ip.clone(),
@@ -427,25 +447,28 @@ impl Transaction {
             bytes_received: self.req.buffer.total_size,
             bytes_sent: self.res.buffer.total_size,
             error: outcome.error,
+            waf_action: self.action.clone(),
+            waf_matched_rules: self
+                .matched_rules
+                .iter()
+                .map(|(id, _)| id.clone())
+                .collect(),
         };
 
         if self.matched_rules.is_empty() {
-            return LogRecord {
-                access,
-                audit: None,
-            };
+            return summary;
         }
 
-        let headers: HashMap<String, String> = self
+        let headers = self
             .request
             .as_ref()
-            .map(|r| r.headers.iter().cloned().collect())
+            .map(|r| r.headers.clone())
             .unwrap_or_default();
         let body = lossy_body(&self.req.buffer.buf);
 
         let response = outcome.headers.map(|headers| AuditResponse {
             status: outcome.status,
-            headers: headers.iter().cloned().collect(),
+            headers: headers.to_vec(),
             body: lossy_body(&self.res.buffer.buf),
             body_size: self.res.buffer.total_size,
         });
@@ -474,10 +497,8 @@ impl Transaction {
             response,
         };
 
-        LogRecord {
-            access,
-            audit: Some(audit),
-        }
+        self.waf.audit_log.write(&audit);
+        summary
     }
 
     /// Run one phase's rules, recording the outcome. In detection-only mode
@@ -625,14 +646,28 @@ fn parse_multipart(body: &[u8], boundary: String) -> Vec<MultipartPartData> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use super::*;
     use crate::config::WafConfig;
+    use crate::logging::{AuditLogEntry, AuditSink};
 
     /// A firewall from top-level `settings` YAML plus root-ruleset `rules`
     /// (a YAML list, unindented).
+    /// Audit entries written by a test WAF, instead of going to a file.
+    struct Capture(Arc<Mutex<Vec<AuditLogEntry>>>);
+
+    impl AuditSink for Capture {
+        fn write(&self, entry: &AuditLogEntry) {
+            self.0.lock().unwrap().push(entry.clone());
+        }
+    }
+
     fn waf(settings: &str, rules: &str) -> Arc<Waf> {
+        waf_with_audit(settings, rules).0
+    }
+
+    fn waf_with_audit(settings: &str, rules: &str) -> (Arc<Waf>, Arc<Mutex<Vec<AuditLogEntry>>>) {
         let rules: String = rules
             .trim_matches('\n')
             .lines()
@@ -641,7 +676,10 @@ mod tests {
         let yaml =
             format!("{settings}\nrulesets:\n  - name: main\n    kind: root\n    rules:\n{rules}");
         let config = WafConfig::from_yaml(&yaml).expect("config should parse");
-        Arc::new(Waf::from_config(&config).expect("waf should build"))
+        let mut waf = Waf::from_config(&config).expect("waf should build");
+        let audits = Arc::new(Mutex::new(Vec::new()));
+        waf.add_audit_sink(Box::new(Capture(Arc::clone(&audits))));
+        (Arc::new(waf), audits)
     }
 
     fn request(path: &str, headers: &[(&str, &str)]) -> RequestData {
@@ -719,25 +757,30 @@ mod tests {
             headers: Some(&[]),
             error: None,
         });
-        assert!(record.audit.is_none());
-        assert_eq!(record.access.method, "POST");
-        assert_eq!(record.access.host, "example.com");
-        assert_eq!(record.access.client_ip, "10.0.0.1");
-        assert_eq!(record.access.status, 200);
+        assert!(record.waf_matched_rules.is_empty());
+        assert_eq!(record.waf_action, "pass");
+        assert_eq!(record.method, "POST");
+        assert_eq!(record.host, "example.com");
+        assert_eq!(record.client_ip, "10.0.0.1");
+        assert_eq!(record.status, 200);
     }
 
     #[test]
     fn detection_only_passes_but_records_the_block() {
-        let mut tx = waf("detection_only: true", BLOCK_ADMIN).transaction();
+        let (waf, audits) = waf_with_audit("detection_only: true", BLOCK_ADMIN);
+        let mut tx = waf.transaction();
         assert_eq!(tx.request_headers(request("/admin", &[])), Verdict::Pass);
         assert_eq!(tx.action(), "block");
-        let audit = tx
-            .finish(ResponseOutcome {
-                status: 200,
-                headers: None,
-                error: None,
-            })
-            .audit
+        let summary = tx.finish(ResponseOutcome {
+            status: 200,
+            headers: None,
+            error: None,
+        });
+        assert_eq!(summary.waf_action, "block");
+        assert_eq!(summary.waf_matched_rules, ["admin"]);
+        let audits = audits.lock().unwrap();
+        let audit = audits
+            .first()
             .expect("matched rule should produce an audit entry");
         assert_eq!(audit.waf_action, "block");
         assert_eq!(audit.waf_matched_rules[0].id, "admin");
@@ -787,7 +830,7 @@ challenge:
             headers: None,
             error: None,
         });
-        assert_eq!(record.access.bytes_received, 6);
+        assert_eq!(record.bytes_received, 6);
     }
 
     #[test]
@@ -937,7 +980,8 @@ challenge:
 
     #[test]
     fn finish_builds_the_audit_entry() {
-        let mut tx = waf("", BLOCK_ADMIN).transaction();
+        let (waf, audits) = waf_with_audit("", BLOCK_ADMIN);
+        let mut tx = waf.transaction();
         tx.request_headers(request("/admin", &[("user-agent", "curl")]));
         tx.request_body_chunk(b"payload", true);
         let headers = [("content-type".to_string(), "text/plain".to_string())];
@@ -946,18 +990,23 @@ challenge:
             headers: Some(&headers),
             error: None,
         });
-        let audit = record.audit.expect("audit entry");
-        assert_eq!(audit.request_id, record.access.request_id);
+        let audits = audits.lock().unwrap();
+        assert_eq!(audits.len(), 1, "one audit entry per transaction");
+        let audit = &audits[0];
+        assert_eq!(audit.request_id, record.request_id);
         assert_eq!(audit.waf_action, "block");
         assert_eq!(audit.waf_matched_rules.len(), 1);
         assert_eq!(audit.waf_matched_rules[0].action, "block");
         assert_eq!(audit.request.path, "/admin");
-        assert_eq!(audit.request.headers["user-agent"], "curl");
+        assert_eq!(
+            audit.request.headers,
+            [("user-agent".to_string(), "curl".to_string())]
+        );
         assert_eq!(audit.request.body.as_deref(), Some("payload"));
         assert_eq!(audit.request.body_size, 7);
-        let response = audit.response.expect("response was written");
+        let response = audit.response.as_ref().expect("response was written");
         assert_eq!(response.status, 418);
-        assert_eq!(response.headers["content-type"], "text/plain");
+        assert_eq!(response.headers, headers);
     }
 
     #[test]
@@ -968,16 +1017,16 @@ challenge:
   action: log
   expression: 'true'
 "#;
-        let mut tx = waf("", rules).transaction();
+        let (waf, audits) = waf_with_audit("", rules);
+        let mut tx = waf.transaction();
         tx.request_headers(request("/", &[]));
-        let audit = tx
-            .finish(ResponseOutcome {
-                status: 200,
-                headers: None,
-                error: None,
-            })
-            .audit
-            .expect("logging rule should be recorded");
+        tx.finish(ResponseOutcome {
+            status: 200,
+            headers: None,
+            error: None,
+        });
+        let audits = audits.lock().unwrap();
+        let audit = audits.first().expect("logging rule should be recorded");
         assert_eq!(audit.waf_matched_rules[0].id, "tail");
         assert!(audit.response.is_none());
     }
@@ -990,9 +1039,9 @@ challenge:
             headers: None,
             error: Some("boom".into()),
         });
-        assert_eq!(record.access.host, "-");
-        assert_eq!(record.access.client_ip, "-");
-        assert_eq!(record.access.error.as_deref(), Some("boom"));
+        assert_eq!(record.host, "-");
+        assert_eq!(record.client_ip, "-");
+        assert_eq!(record.error.as_deref(), Some("boom"));
     }
 
     #[test]
@@ -1005,7 +1054,7 @@ challenge:
             headers: None,
             error: None,
         });
-        assert_eq!(record.access.path, "/admin");
-        assert!(record.audit.is_none());
+        assert_eq!(record.path, "/admin");
+        assert!(record.waf_matched_rules.is_empty());
     }
 }

@@ -17,5 +17,5 @@ pub mod waf;
 
 pub use firewall::{Settings, Waf};
 pub use transaction::{
-    BodyVerdict, Intervention, LogRecord, ResponseOutcome, Transaction, Verdict,
+    BodyVerdict, Intervention, ResponseOutcome, Transaction, TransactionSummary, Verdict,
 };

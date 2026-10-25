@@ -6,102 +6,79 @@ use std::path::PathBuf;
 
 pub use format::{JsonFormatter, TextFormatter};
 use serde::{Deserialize, Serialize};
-pub use sink::{WriterSink, open_writer};
+pub use sink::FileSink;
 
-/// Where and how the [`Logger`] writes access and audit logs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    #[default]
+    Json,
+    Text,
+}
+
+impl LogFormat {
+    pub fn formatter(self) -> Box<dyn Formatter> {
+        match self {
+            Self::Json => Box::new(JsonFormatter),
+            Self::Text => Box::new(TextFormatter),
+        }
+    }
+}
+
+/// Where and how the audit log is written.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct LoggingConfig {
-    /// App log level (debug/info/warn/error)
-    pub level: String,
-    /// Access + audit log format (text/json)
-    pub format: String,
-    /// Access log output path (/dev/stdout, /dev/stderr, or file)
-    pub access_log: PathBuf,
-    /// Audit log output path: detailed logs when rules match
-    pub audit_log: PathBuf,
+pub struct AuditLogConfig {
+    /// `/dev/stdout`, `/dev/stderr`, or a file that is appended to.
+    pub path: PathBuf,
+    pub format: LogFormat,
 }
 
-impl Default for LoggingConfig {
+impl Default for AuditLogConfig {
     fn default() -> Self {
         Self {
-            level: "info".into(),
-            format: "json".into(),
-            access_log: PathBuf::from("/dev/stdout"),
-            audit_log: PathBuf::from("/dev/stderr"),
+            path: PathBuf::from("/dev/stderr"),
+            format: LogFormat::Json,
         }
     }
 }
 
-/// Formats log entries into bytes.
+/// Renders an entry as the bytes of one record, newline included.
 pub trait Formatter: Send + Sync {
-    fn format_access(&self, entry: &AccessLogEntry) -> Vec<u8>;
-    fn format_audit(&self, entry: &AuditLogEntry) -> Vec<u8>;
+    fn format(&self, entry: &AuditLogEntry) -> Vec<u8>;
 }
 
-/// Receives log events.
-pub trait LogSink: Send + Sync {
-    fn on_access(&self, entry: &AccessLogEntry);
-    fn on_audit(&self, entry: &AuditLogEntry);
+/// Receives audit entries. Hosts add their own, such as one forwarding to
+/// the server's error log.
+pub trait AuditSink: Send + Sync {
+    fn write(&self, entry: &AuditLogEntry);
 }
 
-pub struct Logger {
-    sinks: Vec<Box<dyn LogSink>>,
+pub struct AuditLog {
+    sinks: Vec<Box<dyn AuditSink>>,
 }
 
-impl Logger {
-    pub fn new(config: &LoggingConfig) -> Self {
-        let formatter: Box<dyn Formatter> = match config.format.as_str() {
-            "json" => Box::new(JsonFormatter),
-            _ => Box::new(TextFormatter),
-        };
-        let sink = WriterSink::new(
-            formatter,
-            open_writer(&config.access_log),
-            open_writer(&config.audit_log),
-        );
-        Self {
+impl AuditLog {
+    /// An audit log writing to the configured file.
+    pub fn new(config: &AuditLogConfig) -> std::io::Result<Self> {
+        let sink = FileSink::open(&config.path, config.format.formatter())?;
+        Ok(Self {
             sinks: vec![Box::new(sink)],
-        }
+        })
     }
 
-    #[allow(dead_code)]
-    pub fn add_sink(&mut self, sink: Box<dyn LogSink>) {
+    pub fn add_sink(&mut self, sink: Box<dyn AuditSink>) {
         self.sinks.push(sink);
     }
 
-    pub fn access(&self, entry: &AccessLogEntry) {
+    pub fn write(&self, entry: &AuditLogEntry) {
         for sink in &self.sinks {
-            sink.on_access(entry);
-        }
-    }
-
-    pub fn audit(&self, entry: &AuditLogEntry) {
-        for sink in &self.sinks {
-            sink.on_audit(entry);
+            sink.write(entry);
         }
     }
 }
 
-#[derive(Serialize)]
-pub struct AccessLogEntry {
-    pub request_id: String,
-    pub timestamp: String,
-    pub client_ip: String,
-    pub method: String,
-    pub protocol: String,
-    pub host: String,
-    pub path: String,
-    pub query: String,
-    pub status: u16,
-    pub duration_ms: f64,
-    pub bytes_received: usize,
-    pub bytes_sent: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AuditLogEntry {
     pub request_id: String,
     pub timestamp: String,
@@ -116,13 +93,13 @@ pub struct AuditLogEntry {
     pub response: Option<AuditResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MatchedRule {
     pub id: String,
     pub action: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AuditRequest {
     pub client_ip: String,
     pub method: String,
@@ -130,16 +107,18 @@ pub struct AuditRequest {
     pub host: String,
     pub path: String,
     pub query: String,
-    pub headers: HashMap<String, String>,
+    /// In wire order; a name may repeat.
+    pub headers: Vec<(String, String)>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
     pub body_size: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AuditResponse {
     pub status: u16,
-    pub headers: HashMap<String, String>,
+    /// In wire order; a name may repeat.
+    pub headers: Vec<(String, String)>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
     pub body_size: usize,

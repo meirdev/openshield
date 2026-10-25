@@ -68,13 +68,16 @@ geoip:
 
 ## Logs and metrics
 
-These are the default log settings:
+The proxy writes an access log; the WAF writes an audit log. These are the defaults:
 
 ```yaml
-logging:
+logging: # the proxy
+  level: info # process log level; RUST_LOG overrides it
   format: json # json or text
   access_log: /dev/stdout
-  audit_log: /dev/stderr
+audit_log: # the WAF
+  path: /dev/stderr
+  format: json # json or text
 ```
 
 Set the top-level `log_payloads: true` to include, in each audit entry, the field values referenced by the rules that matched. It defaults to `false`.

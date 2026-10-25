@@ -6,8 +6,28 @@
 use std::path::{Path, PathBuf};
 
 use openshield_core::config::WafConfig;
-use openshield_core::logging::LoggingConfig;
+use openshield_core::logging::LogFormat;
 use serde::Deserialize;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LoggingConfig {
+    /// Process log level: debug, info, warn or error. `RUST_LOG` overrides it.
+    pub level: String,
+    pub format: LogFormat,
+    /// `/dev/stdout`, `/dev/stderr`, or a file that is appended to.
+    pub access_log: PathBuf,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            level: "info".into(),
+            format: LogFormat::Json,
+            access_log: PathBuf::from("/dev/stdout"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ServerConfig {
@@ -126,9 +146,10 @@ rulesets:
         assert_eq!(cfg.upstream_keepalive_pool, Some(64));
         assert_eq!(cfg.pid_file, "/tmp/openshield.pid");
         assert!(cfg.tls.is_some());
-        assert_eq!(cfg.logging.format, "text");
+        assert_eq!(cfg.logging.format, LogFormat::Text);
         assert_eq!(cfg.logging.access_log, PathBuf::from("/tmp/a.log"));
-        assert_eq!(cfg.logging.audit_log, PathBuf::from("/dev/stderr"));
+        assert_eq!(cfg.logging.level, "info");
+        assert_eq!(cfg.waf.audit_log.path, PathBuf::from("/dev/stderr"));
         let metrics = cfg.metrics.unwrap();
         assert!(metrics.enabled);
         assert_eq!(metrics.listen, "0.0.0.0:9100");

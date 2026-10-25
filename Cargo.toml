@@ -54,3 +54,4 @@ matchit = "0.9"
 mime = "0.3"
 roxmltree = "0.20"
 aws-lc-rs = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
