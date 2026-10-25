@@ -234,7 +234,7 @@ rulesets:
 | `requests_per_period` | Allowed matches per key; set explicitly                                    |
 | `mitigation_timeout`  | Seconds to keep applying the action after exceeding the limit; default `0` |
 
-Use `[ip.src, http.request.uri.path]` for a separate limit per IP and path, or `[http.user_agent]` to group by user agent. Only matches reached during rule evaluation count. Reloading with SIGHUP resets counters.
+Use `[ip.src, http.request.uri.path]` for a separate limit per IP and path, or `[http.user_agent]` to group by user agent. Only matches reached during rule evaluation count. Counters live in the proxy process, so they are per process and reloading with SIGHUP resets them.
 
 ## Functions
 
