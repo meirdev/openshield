@@ -15,6 +15,7 @@ use crate::transaction::Transaction;
 use crate::waf::engine::{Engine, Phase};
 use crate::waf::jwt::JwtValidator;
 use crate::waf::lists::{self, BytesListMatcher, IpListMatcher};
+use crate::waf::ratelimit::{MemoryStore, RateLimitManager, RateLimitStore};
 use crate::waf::schema::SchemaValidator;
 use crate::waf::scheme;
 
@@ -67,7 +68,17 @@ impl Waf {
         self.audit_log.add_sink(sink);
     }
 
+    /// Build with the in-process rate-limit store.
     pub fn from_config(config: &WafConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::from_config_with_store(config, Arc::new(MemoryStore::new()))
+    }
+
+    /// Build with a rate-limit store of the host's choosing, such as one in
+    /// memory shared between worker processes.
+    pub fn from_config_with_store(
+        config: &WafConfig,
+        store: Arc<dyn RateLimitStore>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let geoip = match config.geoip.as_ref() {
             Some(geo_cfg) => {
                 let g = GeoIp::open(&geo_cfg.city_mmdb, &geo_cfg.asn_mmdb)
@@ -84,7 +95,7 @@ impl Waf {
         let scheme = scheme::build(&config.scores, &config.token_ids());
         info!("WAF scheme: {} fields", scheme.field_count());
 
-        let engine = compiler::compile(config, &scheme, None)
+        let engine = compiler::compile(config, &scheme, Some(RateLimitManager::with_store(store)))
             .map_err(|e| format!("failed to compile rules: {e}"))?;
         info!("Rules compiled: {}", engine.rule_count());
 
@@ -165,6 +176,12 @@ impl Waf {
 
     pub fn rule_count(&self) -> usize {
         self.engine.rule_count()
+    }
+
+    /// True when some rule runs in the `request_body` phase, so a host that
+    /// must choose whether to read the body at all should read it.
+    pub fn inspects_request_body(&self) -> bool {
+        self.has_request_body_rules
     }
 
     /// True when a response body may be withheld or replaced, so the host

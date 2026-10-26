@@ -1,0 +1,35 @@
+[package]
+name = "openshield-nginx"
+description = "OpenShield WAF as an nginx dynamic module"
+version.workspace = true
+edition.workspace = true
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+# The module only links inside nginx; tests live in `tests/` and load the
+# built `.so` into nginx. `cargo test` does not rebuild a cdylib, so build
+# first (see the Makefile).
+test = false
+doctest = false
+
+[dependencies]
+openshield-core.workspace = true
+ngx.workspace = true
+nginx-sys.workspace = true
+log.workspace = true
+form_urlencoded.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[features]
+# The `ngx_modules` export table that nginx looks for in a dynamic module
+# built outside its own build system (plain `cargo build`). Turn it off when
+# building through nginx's `--add-dynamic-module`.
+default = ["export-modules"]
+export-modules = []
+# Build against a bundled copy of the nginx source instead of
+# `NGINX_BUILD_DIR`. For development and tests; production builds should
+# target the exact nginx they will load into.
+vendored = ["ngx/vendored"]
