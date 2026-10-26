@@ -284,10 +284,12 @@ Transforms and detection functions accept a string or an array of strings. Use `
 
 ### Maps and arrays
 
-| Function                       | Description                                                          |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `has_key(map, key)`            | True if the map has the key                                          |
-| `has_value(collection, value)` | True if the value occurs in the array, or in any of the map's values |
+| Function                           | Description                                                          |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `has_key(map, key)`                | True if the map has the key                                          |
+| `has_value(collection, value)`     | True if the value occurs in the array, or in any of the map's values |
+| `except(map, key, ...)`            | The map without the given keys                                       |
+| `except_matching(map, regex, ...)` | The map without the keys matching any of the regexes                 |
 
 ### JSON
 

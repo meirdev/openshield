@@ -1,6 +1,8 @@
+use regex::bytes::Regex;
 use wirefilter_engine::{
-    ExpectedType, FunctionArgs, FunctionDefinition, FunctionDefinitionContext, FunctionParam,
-    FunctionParamError, GetType, LhsValue, ParserSettings, Type,
+    BytesExpr, ExpectedType, FunctionArgs, FunctionDefinition, FunctionDefinitionContext,
+    FunctionParam, FunctionParamError, GetType, LhsValue, LiteralValue, Map, ParserSettings, Type,
+    TypeMismatchError,
 };
 
 #[derive(Debug)]
@@ -163,6 +165,110 @@ impl FunctionDefinition for HasValueFunction {
     }
 }
 
+#[derive(Debug)]
+pub struct ExceptFunction {
+    patterns: bool,
+}
+
+impl ExceptFunction {
+    pub fn exact() -> Self {
+        Self { patterns: false }
+    }
+
+    pub fn matching() -> Self {
+        Self { patterns: true }
+    }
+}
+
+#[derive(Clone)]
+enum KeyMatcher {
+    Exact(Vec<u8>),
+    Pattern(Regex),
+}
+
+impl KeyMatcher {
+    fn parse(literal: &[u8], pattern: bool) -> Result<Self, String> {
+        if pattern {
+            let pattern =
+                std::str::from_utf8(literal).map_err(|_| "key pattern is not UTF-8".to_string())?;
+            Regex::new(pattern)
+                .map(Self::Pattern)
+                .map_err(|e| format!("invalid key pattern {pattern:?}: {e}"))
+        } else {
+            Ok(Self::Exact(literal.to_vec()))
+        }
+    }
+
+    fn matches(&self, key: &[u8]) -> bool {
+        match self {
+            Self::Exact(k) => k == key,
+            Self::Pattern(re) => re.is_match(key),
+        }
+    }
+}
+
+impl FunctionDefinition for ExceptFunction {
+    fn check_param(
+        &self,
+        _: &ParserSettings,
+        params: &mut dyn ExactSizeIterator<Item = FunctionParam<'_>>,
+        next_param: &FunctionParam<'_>,
+        _: Option<&mut FunctionDefinitionContext>,
+    ) -> Result<(), FunctionParamError> {
+        match params.len() {
+            0 => next_param.expect_val_type([ExpectedType::Map].into_iter()),
+            _ => next_param.expect_const_value::<&BytesExpr, _>(|key| {
+                KeyMatcher::parse(key, self.patterns).map(|_| ())
+            }),
+        }
+    }
+
+    fn return_type(
+        &self,
+        params: &mut dyn ExactSizeIterator<Item = FunctionParam<'_>>,
+        _: Option<&FunctionDefinitionContext>,
+    ) -> Type {
+        params
+            .next()
+            .map(|p| p.get_type())
+            .unwrap_or(Type::Map(Type::Array(Type::Bytes.into()).into()))
+    }
+
+    fn arg_count(&self) -> (usize, Option<usize>) {
+        (2, None)
+    }
+
+    fn compile(
+        &self,
+        params: &mut dyn ExactSizeIterator<Item = FunctionParam<'_>>,
+        _: Option<FunctionDefinitionContext>,
+    ) -> Box<dyn for<'i, 'a> Fn(FunctionArgs<'i, 'a>) -> Option<LhsValue<'a>> + Sync + Send + 'static>
+    {
+        let _map = params.next();
+        let patterns = self.patterns;
+        let excluded: Vec<KeyMatcher> = params
+            .filter_map(|p| match p {
+                FunctionParam::Constant(LiteralValue::Bytes(b)) => {
+                    KeyMatcher::parse(b, patterns).ok()
+                }
+                _ => None,
+            })
+            .collect();
+        Box::new(move |args| {
+            let LhsValue::Map(map) = args.next()?.ok()? else {
+                return None;
+            };
+            let kept = map
+                .iter()
+                .filter(|(key, _)| !excluded.iter().any(|m| m.matches(key)))
+                .map(|(key, value)| Ok::<_, TypeMismatchError>((Box::from(key), value.clone())));
+            Map::try_from_iter(map.value_type(), kept)
+                .ok()
+                .map(LhsValue::Map)
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     mod via_scheme {
@@ -262,6 +368,94 @@ mod tests {
                     .is_err()
             );
             assert!(scheme.parse(r#"has_key(http.request.headers, 1)"#).is_err());
+        }
+
+        #[test]
+        fn except_drops_exact_keys() {
+            assert!(eval(
+                r#"has_key(except(http.request.headers, "accept"), "x-my-header")"#
+            ));
+            assert!(!eval(
+                r#"has_key(except(http.request.headers, "accept"), "accept")"#
+            ));
+            assert!(!eval(
+                r#"has_key(except(http.request.headers, "accept", "x-my-header"), "x-my-header")"#
+            ));
+            // The result is still a map: indexing and iteration work on it.
+            assert!(eval(
+                r#"except(http.request.headers, "accept")["x-my-header"][0] == "1""#
+            ));
+            assert!(eval(
+                r#"all(except(http.request.headers, "accept")[*][*] == "1")"#
+            ));
+            assert!(!eval(r#"all(http.request.headers[*][*] == "1")"#));
+        }
+
+        #[test]
+        fn except_matching_drops_keys_matching_a_pattern() {
+            assert!(!eval(
+                r#"has_key(except_matching(http.request.headers, "^x-"), "x-my-header")"#
+            ));
+            assert!(eval(
+                r#"has_key(except_matching(http.request.headers, "^x-"), "accept")"#
+            ));
+            assert!(eval(
+                r#"has_key(except_matching(http.request.headers, "^X-"), "x-my-header")"#
+            ));
+            assert!(!eval(
+                r#"has_key(except_matching(http.request.headers, "(?i)^X-"), "x-my-header")"#
+            ));
+            assert!(!eval(
+                r#"has_key(except_matching(http.request.headers, "^x-", "^acc"), "accept")"#
+            ));
+            // Exact and pattern exclusions nest, since both return the map.
+            assert!(!eval(
+                r#"has_key(except(except_matching(http.request.headers, "^x-"), "accept"), "accept")"#
+            ));
+            // `except` never treats a key as a pattern.
+            assert!(eval(
+                r#"has_key(except(http.request.headers, "/^x-/"), "x-my-header")"#
+            ));
+        }
+
+        #[test]
+        fn except_in_a_byte_range_rule() {
+            // Every value is printable ASCII, so the range check passes.
+            assert!(eval(
+                r#"all(except(http.request.headers, "accept")[*][*] matches "^[\x20-\x7e]*$")"#
+            ));
+            // Only "accept" carries non-digits; excluding it leaves "1".
+            assert!(eval(
+                r#"all(except(http.request.headers, "accept")[*][*] matches "^[0-9]*$")"#
+            ));
+            assert!(!eval(
+                r#"all(http.request.headers[*][*] matches "^[0-9]*$")"#
+            ));
+        }
+
+        #[test]
+        fn except_rejects_bad_arguments() {
+            let scheme = scheme();
+            assert!(
+                scheme
+                    .parse(r#"has_key(except(http.request.headers), "a")"#)
+                    .is_err()
+            );
+            assert!(
+                scheme
+                    .parse(r#"has_key(except(http.request.headers.names, "a"), "a")"#)
+                    .is_err()
+            );
+            assert!(
+                scheme
+                    .parse(r#"has_key(except(http.request.headers, http.host), "a")"#)
+                    .is_err()
+            );
+            let err = scheme
+                .parse(r#"has_key(except_matching(http.request.headers, "["), "a")"#)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("invalid key pattern"), "{err}");
         }
     }
 }
