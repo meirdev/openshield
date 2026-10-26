@@ -9,6 +9,7 @@ http {
     openshield_config /etc/openshield/waf.yaml;
 
     log_format waf '$remote_addr "$request" $status $openshield_action $openshield_rules $openshield_request_id';
+
     access_log /var/log/nginx/access.log waf;
 
     server {
@@ -28,12 +29,12 @@ http {
 
 ## Directives
 
-| Directive                 | Context                  | Description                                                                                                       |
-| ------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `openshield_config` path  | `http`                   | The WAF configuration: a YAML file with the WAF keys from [configuration](configuration.md) and nothing else. Relative paths resolve from nginx's prefix. Errors fail `nginx -t`. |
-| `openshield on` \| `off`  | `http`, `server`, `location` | Inspect requests here. Inherited by nested blocks; defaults to off.                                           |
-| `openshield_turnstile_location` uri | `http`        | Internal location that proxies Turnstile verification to Cloudflare; see [Challenges](#challenges). Default `/_openshield/turnstile`. |
-| `openshield_ratelimit_zone` size | `http`           | Shared memory for rate-limit counters, such as `10m` (the default). Each counter takes under 100 bytes.   |
+| Directive                           | Context                      | Description                                                                                                                                                                       |
+| ----------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openshield_config` path            | `http`                       | The WAF configuration: a YAML file with the WAF keys from [configuration](configuration.md) and nothing else. Relative paths resolve from nginx's prefix. Errors fail `nginx -t`. |
+| `openshield on` \| `off`            | `http`, `server`, `location` | Inspect requests here. Inherited by nested blocks; defaults to off.                                                                                                               |
+| `openshield_turnstile_location` uri | `http`                       | Internal location that proxies Turnstile verification to Cloudflare; see [Challenges](#challenges). Default `/_openshield/turnstile`.                                             |
+| `openshield_ratelimit_zone` size    | `http`                       | Shared memory for rate-limit counters, such as `10m` (the default). Each counter takes under 100 bytes.                                                                           |
 
 `nginx -s reload` rebuilds the WAF from the file. Rate-limit counters live in a shared memory zone, so all worker processes count together, and they survive a reload as long as the zone's size is unchanged. When the zone is full, counters that have not been seen for two periods are dropped; if none can be dropped, the request is let through and a warning is logged.
 
@@ -41,23 +42,23 @@ http {
 
 Set once the request has been inspected, so they are meant for `log_format`. Requests on locations with `openshield off` leave them unset, which nginx logs as `-`.
 
-| Variable                 | Value                                                          |
-| ------------------------ | -------------------------------------------------------------- |
-| `$openshield_action`     | `pass`, `allow`, `block` or `challenge`                        |
+| Variable                 | Value                                                               |
+| ------------------------ | ------------------------------------------------------------------- |
+| `$openshield_action`     | `pass`, `allow`, `block` or `challenge`                             |
 | `$openshield_rules`      | IDs of the rules that matched with logging enabled, comma-separated |
-| `$openshield_request_id` | The ID used in the audit log entry                              |
+| `$openshield_request_id` | The ID used in the audit log entry                                  |
 
 The audit log is written by the WAF itself to the `audit_log` path in the YAML. With the default `/dev/stderr` it lands in nginx's error log, so set a file path.
 
 ## What runs where
 
-| OpenShield phase   | nginx phase    | Status                                                                                    |
-| ------------------ | -------------- | ----------------------------------------------------------------------------------------- |
-| `request_headers`  | access         | Done. Block responses are sent with the rule's status, content type and body. Challenge pages are served. |
-| `request_body`     | access         | Done. When `request_body` rules exist, the body is read before proxying and inspected.   |
-| `response_headers` | header filter  | Done, for its side effects (scores, logging). A block verdict here is not acted on.       |
-| `response_body`    | body filter    | Done, with `inspect_response_body: true`. A block replaces the rest of the body; the status and headers are already sent. |
-| `logging`          | log            | Done. Runs before nginx writes the access log, so the variables are filled.               |
+| OpenShield phase   | nginx phase   | Status                                                                                                                    |
+| ------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `request_headers`  | access        | Done. Block responses are sent with the rule's status, content type and body. Challenge pages are served.                 |
+| `request_body`     | access        | Done. When `request_body` rules exist, the body is read before proxying and inspected.                                    |
+| `response_headers` | header filter | Done, for its side effects (scores, logging). A block verdict here is not acted on.                                       |
+| `response_body`    | body filter   | Done, with `inspect_response_body: true`. A block replaces the rest of the body; the status and headers are already sent. |
+| `logging`          | log           | Done. Runs before nginx writes the access log, so the variables are filled.                                               |
 
 Only the main request is inspected. Subrequests and `error_page` redirects reuse its verdict.
 
