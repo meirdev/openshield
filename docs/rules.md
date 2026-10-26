@@ -282,6 +282,13 @@ Transforms and detection functions accept a string or an array of strings. Use `
 | `all(array)`        | True if all elements are true |
 | `concat(a, b, ...)` | Concatenate strings           |
 
+### Maps and arrays
+
+| Function                       | Description                                                          |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `has_key(map, key)`            | True if the map has the key                                          |
+| `has_value(collection, value)` | True if the value occurs in the array, or in any of the map's values |
+
 ### JSON
 
 | Function                                      | Description                                       |

@@ -64,6 +64,9 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
 
     // String functions (non-polymorphic)
     b.add_function("len", generic::LenFunction).unwrap();
+    b.add_function("has_key", generic::HasKeyFunction).unwrap();
+    b.add_function("has_value", generic::HasValueFunction)
+        .unwrap();
     b.add_function(
         "starts_with",
         helpers::bytes_bytes_to_bool(string::starts_with_fn),
