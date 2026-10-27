@@ -1,11 +1,11 @@
 ---
 title: Injection detection
-description: "SQL injection and XSS detection with libinjection, and the transforms that defeat evasion."
+description: "Detect SQL injection and XSS, normalize inputs, and combine signals with scores."
 sidebar:
   order: 1
 ---
 
-`detect_sqli` and `detect_xss` run [libinjection](https://github.com/libinjection/libinjection), the detector used by ModSecurity and many commercial firewalls. They take a string, or an array of strings, and return whether it looks like an attack.
+`detect_sqli` and `detect_xss` use [libinjection](https://github.com/libinjection/libinjection) to check whether a string resembles SQL injection or XSS. Use `[*]` to check each array element:
 
 ```text
 any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))
@@ -44,7 +44,7 @@ Query arguments and form fields are already decoded once when they are parsed in
 
 ## Score, then decide
 
-Detection on every input in one rule blocks on the first hit. Scoring each source separately and deciding on the total keeps a single false positive from blocking a user, and lets you weight sources:
+Scoring lets you assign different weights to detection sources before deciding whether to block. In this example, a query-argument match contributes enough points to reach the threshold by itself, while a user-agent match needs another signal:
 
 ```yaml
 scores: [sqli]
@@ -66,4 +66,4 @@ rulesets:
         expression: "score.sqli >= 10"
 ```
 
-Roll out with `detection_only: true` and `log_payloads: true`, read the audit log for a while, then enforce.
+Since detectors can miss attacks or flag benign input, review representative traffic with `detection_only: true` before enforcing the policy. If you need the matching field values to investigate a result, enable `log_payloads` after reviewing what the audit log [captures](../../configuration/logging/#captured-data).

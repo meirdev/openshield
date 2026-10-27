@@ -7,26 +7,28 @@ sidebar:
 
 ## From a release
 
-Releases on [GitHub](https://github.com/meirdev/openshield/releases) ship `openshield`, a statically linked binary for Linux x86_64 that runs on any distribution:
+The release workflow builds a statically linked Linux x86_64 binary. On a matching machine, download the `openshield` asset from [GitHub Releases](https://github.com/meirdev/openshield/releases):
 
 ```bash
-curl -L -o openshield https://github.com/meirdev/openshield/releases/latest/download/openshield
+curl -fL -o openshield https://github.com/meirdev/openshield/releases/latest/download/openshield
 chmod +x openshield
 ./openshield --version
 ```
 
+You can run the downloaded binary as `./openshield` or put it on your `PATH` to use the commands shown throughout these docs. For repeatable deployments, replace `latest` in the download URL with a specific release tag.
+
 ## From source
 
-You need a Rust toolchain that supports edition 2024 (Rust 1.85 or newer, [rustup](https://rustup.rs) installs it):
+Building from source requires current stable Rust, a C compiler, and CMake. Use the current toolchain because the workspace uses edition 2024 without declaring a minimum supported Rust version.
 
 ```bash
 git clone https://github.com/meirdev/openshield.git
 cd openshield
-cargo build --release
+cargo build --release --locked
 ./target/release/openshield --version
 ```
 
-The binary is `target/release/openshield`. It has no runtime dependencies beyond the files your configuration names: an optional TLS certificate, GeoIP databases, OpenAPI documents.
+The build produces `target/release/openshield`, whose runtime dependencies depend on the target you chose. When deploying it, also provide any TLS files, databases, schemas, or challenge pages named in its configuration.
 
 ## The nginx module
 
@@ -44,4 +46,6 @@ openshield [OPTIONS]
   -V, --version
 ```
 
-`--test` loads the configuration, compiles every rule expression, reads keys, schemas and lists, and exits with a non-zero status on any error. Run it before every deploy and reload.
+Before a deployment or [reload](../../operations/running/#reload), use `--test` to validate configuration, compile active rules, initialize WAF resources, and open log destinations without starting the listener. Upstream connectivity and TLS setup need separate checks.
+
+Continue with [Your first configuration](../first-configuration/) to start a local proxy and test a blocking rule.

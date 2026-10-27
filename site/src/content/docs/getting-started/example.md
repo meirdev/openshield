@@ -1,11 +1,11 @@
 ---
 title: The example
-description: "A complete configuration in the repository, with an application to run it against and requests that exercise every rule."
+description: "Run the example application and try rules for injection, rate limits, JWTs, and OpenAPI validation."
 sidebar:
   order: 4
 ---
 
-The repository's [`examples/`](https://github.com/meirdev/openshield/tree/main/examples) directory is a working deployment in miniature. It is also what the end-to-end test runs, so it always matches the code.
+The repository's [`examples/`](https://github.com/meirdev/openshield/tree/main/examples) directory pairs an echo application with the WAF configuration used by the proxy's end-to-end test. It lets you try lists, scores, injection detection, rate limiting, JWTs, and schema validation without supplying GeoIP databases or Turnstile credentials, which are not included.
 
 | File | Purpose |
 | --- | --- |
@@ -16,12 +16,23 @@ The repository's [`examples/`](https://github.com/meirdev/openshield/tree/main/e
 
 ## Run it
 
+From the repository root, build the proxy and start the example application:
+
 ```bash
-cargo build --release
+cargo build --release --locked
 cd examples
-python3 upstream.py &
+python3 upstream.py
+```
+
+In a second terminal, from the repository root:
+
+```bash
+cd examples
+../target/release/openshield --test -c config.yaml
 ../target/release/openshield -c config.yaml
 ```
+
+The application listens on port 3000, and OpenShield forwards to it from port 8080. Run requests from a third terminal in `examples/`, then stop each server with `Ctrl+C` when finished. If you adapt the configuration for your own application, replace the sample JWT secret.
 
 ## What each request does
 
@@ -44,13 +55,13 @@ The commands are in the example's `README.md`, ready to paste.
 
 ## Read the logs
 
-The example writes both logs in text format. The access log, one line per request:
+The example writes both logs in text format. Every request produces an access-log line showing its HTTP outcome:
 
 ```text
 2026-10-25T09:44:33.326Z [1ae4c898-…] 127.0.0.1 GET /search?q=1'%20OR%20'1'='1 -> 403 0.412ms waf=block
 ```
 
-The audit log, one record per request on which rules matched, with the field values that triggered them (`log_payloads: true`):
+When rules match, the request also produces an audit record. Because the example enables `log_payloads`, that record includes the field values that triggered those rules:
 
 ```text
 2026-10-25T09:44:33.326Z [1ae4c898-…] block 127.0.0.1 127.0.0.1:8080 "GET /search?q=1'%20OR%20'1'='1 HTTP/1.1" -> 403

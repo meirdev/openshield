@@ -9,14 +9,20 @@ With a `metrics` block in the configuration, the proxy serves Prometheus metrics
 
 ```yaml
 metrics:
-  listen: "0.0.0.0:9090"
+  listen: "127.0.0.1:9090"
 ```
 
 | Metric | Type | Measures |
 | --- | --- | --- |
 | `openshield_requests_total` | Counter | Requests processed |
-| `openshield_connections_active` | Gauge | Client connections open now |
-| `openshield_bytes_received_total` | Counter | Bytes received from clients |
-| `openshield_bytes_sent_total` | Counter | Bytes sent to clients |
+| `openshield_connections_active` | Gauge | Active request contexts; despite its name, not a count of TCP connections |
+| `openshield_bytes_received_total` | Counter | Request-body bytes seen by the proxy's body filter |
+| `openshield_bytes_sent_total` | Counter | Body bytes passed or released by the proxy's response-body filter |
 
-Pingora's own metrics are exported alongside. Rule-level counts are not metrics; derive them from the audit log, where every match is recorded with its rule ID.
+These metrics are exported alongside Pingora's and reset when the process restarts or reloads. The byte counters measure body data rather than total network traffic, so they exclude HTTP headers. You can inspect the endpoint with:
+
+```bash
+curl http://127.0.0.1:9090/metrics
+```
+
+To count individual rule matches, use the [audit log](../logs/#audit-log), since the proxy does not expose per-rule metrics. Those counts include only logging-enabled matches and exclude rules skipped during evaluation.

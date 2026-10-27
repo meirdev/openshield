@@ -7,8 +7,12 @@ sidebar:
 
 `libopenshield_nginx.so` runs the WAF inside nginx. The module loads a WAF configuration when nginx reads its own, and inspects requests on the locations where it is switched on.
 
+The following HTTP configuration enables inspection in front of an application listening on port 3000:
+
 ```nginx
 load_module modules/libopenshield_nginx.so;
+
+events {}
 
 http {
     openshield_config /etc/openshield/waf.yaml;
@@ -17,15 +21,16 @@ http {
     access_log /var/log/nginx/access.log waf;
 
     server {
-        listen 443 ssl;
+        listen 8080;
 
         location / {
             openshield on;
-            proxy_pass http://backend;
+            proxy_pass http://127.0.0.1:3000;
         }
 
         location /static/ {
             openshield off;
+            proxy_pass http://127.0.0.1:3000;
         }
     }
 }
@@ -42,11 +47,11 @@ The YAML holds the [WAF keys](../../configuration/overview/) only, not the proxy
 | `openshield_turnstile_location` *uri* | `http` | Internal location proxying Turnstile verification to Cloudflare; default `/_openshield/turnstile` |
 | `openshield_ratelimit_zone` *size* | `http` | Shared memory for rate-limit counters, default `10m`; a counter takes under 100 bytes |
 
-`nginx -s reload` rebuilds the WAF from the file. Rate-limit counters live in the shared zone, so all workers count together and counts survive a reload while the zone size is unchanged. When the zone is full, counters not seen for two periods are dropped; if none can be, the request passes and a warning is logged.
+Validate changes with `nginx -t` before applying them with `nginx -s reload`. The reload rebuilds the WAF while preserving shared rate-limit counters if the zone size is unchanged. When the zone fills, it evicts counters that have been idle for two periods and have no active mitigation; if none qualify, the request passes and a warning is logged.
 
 ## Variables
 
-Set once a request has been inspected, for `log_format`. Locations with `openshield off` leave them unset, which nginx logs as `-`.
+After inspection, these variables expose the result to `log_format`. Locations with `openshield off` leave them unset, so nginx logs them as `-`.
 
 | Variable | Value |
 | --- | --- |
@@ -87,7 +92,7 @@ Name it with `openshield_turnstile_location` if you use another URI. The rest of
 
 The module must be built against the nginx it will load into: nginx's `configure` flags and distribution patches shape the ABI. You need a Rust toolchain, a C compiler, `libclang` for the binding generator, and nginx's build dependencies (OpenSSL, PCRE2 and zlib headers).
 
-Against a configured nginx source tree, the production path:
+For production, configure the matching nginx source tree before building the module against it:
 
 ```bash
 tar xf nginx-1.28.3.tar.gz && cd nginx-1.28.3

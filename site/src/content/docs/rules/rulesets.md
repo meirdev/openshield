@@ -22,7 +22,7 @@ rulesets:
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `id` | Required | Unique within the ruleset; appears in logs |
+| `id` | Required | Identifies the rule in logs and rate-limit counters; use distinct IDs |
 | `action` | Required | What to do on a match; see [Actions](../actions/) |
 | `expression` | Required | A [Wirefilter expression](../expressions/) |
 | `phase` | `request_headers` | When the rule runs; see [Phases](../phases/) |
@@ -41,13 +41,18 @@ rulesets:
 | `custom` | Only when a root rule executes it. The default |
 | `managed` | Same as `custom`; marks rulesets maintained elsewhere, such as a vendored rule set |
 
-Names are unique. `description` and `version` are optional.
+Give each ruleset a unique name so `execute` can refer to it unambiguously; `description` and `version` are optional metadata.
 
 ## Executing a ruleset
 
-A root rule with `action: execute` runs the ruleset named in `action_parameters.id`. Its rules take the place of the `execute` rule, in order, each keeping its own phase:
+A root rule with `action: execute` includes the ruleset named in `action_parameters.id`. At configuration load time, its rules are expanded in place, each keeping its own phase. This WAF fragment includes the list used by the guard expression:
 
 ```yaml
+lists:
+  - name: office
+    kind: ip
+    items: ["203.0.113.0/24"]
+
 rulesets:
   - name: detections
     description: Shared detection rules
@@ -75,7 +80,7 @@ rulesets:
           id: detections
 ```
 
-The `execute` rule's expression guards every rule it runs: a rule from `detections` matches only when both expressions match. Use `expression: "true"` to run a ruleset unconditionally.
+The `execute` expression becomes a guard on every included rule, so a rule from `detections` matches only when both expressions are true. Each guard is evaluated in its child's phase rather than remembered across phases, which means its fields must be available wherever the child runs. Use `expression: "true"` when no guard is needed.
 
 Only root rulesets contain `execute` rules, and they execute custom and managed rulesets only. A ruleset nothing executes never runs; OpenShield warns about it at startup.
 

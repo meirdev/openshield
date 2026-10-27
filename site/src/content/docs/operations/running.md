@@ -1,6 +1,6 @@
 ---
 title: Running
-description: "Validate, start, reload without dropping connections, and debug."
+description: "Validate configuration, start the proxy, reload, and inspect process logs."
 sidebar:
   order: 1
 ---
@@ -11,7 +11,9 @@ sidebar:
 openshield --test -c config.yaml
 ```
 
-Loads the configuration, compiles every rule expression, reads lists, keys, schemas and GeoIP databases, and exits non-zero with the error if anything is wrong. Nothing is bound. Run it in CI and before every reload.
+Run this command with the service's working directory and permissions so file resolution and access checks match production. It loads the configuration, compiles active rules, initializes WAF resources, and opens log destinations before exiting without binding a listener.
+
+The check does not test upstream connectivity or load the listener's TLS certificate and key. Verify those separately when changing them.
 
 ## Start
 
@@ -24,12 +26,14 @@ The process stays in the foreground; run it under systemd or another supervisor.
 ## Reload
 
 ```bash
-kill -HUP "$(cat /tmp/openshield.pid)"
+openshield --test -c config.yaml && kill -HUP "$(cat /tmp/openshield.pid)"
 ```
 
-`SIGHUP` starts a replacement process with `--upgrade`. The new process loads the configuration, rules, lists, keys, schemas and databases; if that fails, it exits and the old process keeps serving. Otherwise the listening sockets are handed over through `upgrade_sock`, the old process stops accepting, drains its connections and exits. No connection is dropped.
+Use the running service's configuration path and `pid_file` in this command. After validation succeeds, `SIGHUP` spawns a replacement with `--upgrade` and signals the old process to transfer listening sockets through `upgrade_sock` before draining its connections.
 
-Rate-limit counters start from zero in the new process.
+**There is no readiness check before the old process is signaled**, so a failed replacement is not guaranteed to leave the old process serving. Validate first, keep listener and upgrade-socket settings consistent across the handoff, and check startup logs to confirm that the new process accepts requests.
+
+Because the replacement is a new process, its rate-limit counters start from zero. This procedure applies to the standalone proxy; the nginx module uses `nginx -t` followed by `nginx -s reload`.
 
 ## Debug
 
@@ -43,4 +47,4 @@ At `debug`, OpenShield logs each rule match, why JWTs were rejected, and why sch
 
 ## Exit codes
 
-`0` on a clean stop, `1` when the configuration cannot be loaded or compiled.
+Configuration and WAF initialization failures exit with `1`. Other startup failures, such as an invalid upstream port or unreadable TLS files, can exit differently. Treat any non-zero exit as a failure and check stderr.

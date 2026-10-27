@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-Two logs are written. The **access log** has one line per request and belongs to the host. The **audit log** has one record per request on which rules matched, and is written by the WAF itself, so it looks the same under the proxy and under nginx.
+The **access log** records the HTTP outcome for each request and belongs to the host. The **audit log** records requests with at least one logging-enabled rule match and is written by the WAF, with the same format under the proxy and nginx.
 
 ```yaml
 logging:            # the proxy's
@@ -26,14 +26,24 @@ detection_only: false
 | `logging.access_log` | `/dev/stdout` | `/dev/stdout`, `/dev/stderr` or a file that is appended to |
 | `audit_log.path` | `/dev/stderr` | Same choices. Several processes may share one file: each record is written under a file lock |
 | `audit_log.format` | `json` | Audit log format |
-| `log_payloads` | `false` | Include, in each audit record, the values of the fields the matching rules referenced |
-| `detection_only` | `false` | Evaluate and log, but never block or challenge |
+| `log_payloads` | `false` | Add `waf_payloads` with the field values referenced by logging-enabled matching rules |
+| `detection_only` | `false` | Record rule decisions without enforcing their block or challenge outcomes |
 
 What the records contain, and the text formats, are described under [Logs](../../operations/logs/).
 
 ## Per rule
 
-A rule's `logging: {enabled: false}` keeps its action but leaves it out of the audit log and of the access log's matched-rule list, for rules that fire constantly and tell you nothing.
+Setting a rule's `logging: {enabled: false}` omits its ID from the audit record and the access log's matched-rule list without changing its action. If no logging-enabled rule matches, the request produces no audit record, although its access log can still report `waf_action: block` or `challenge`. This setting does not control process logging.
+
+## Detection-only mode
+
+With `detection_only: true`, OpenShield records rule decisions without enforcing their blocking or challenge actions. A request can therefore have a logged `block` decision while receiving `200` from the upstream.
+
+Evaluation otherwise follows its normal order: terminal matches stop the phase, and scores and rate-limit counters still change. If you want evaluation to continue after a match, use `action: log`. Body-limit rejection and host limits apply separately, as described in [Body inspection](../body-inspection/).
+
+## Captured data
+
+Setting `log_payloads: false` removes the extra `waf_payloads` map, but does not redact the rest of the audit record. Headers, cookies, query strings, and captured bodies can still appear, including request bodies captured by the proxy without body rules. The [audit log reference](../../operations/logs/#audit-log) explains what is retained.
 
 ## Rotation
 

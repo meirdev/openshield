@@ -5,7 +5,9 @@ sidebar:
   order: 3
 ---
 
-Point a schema at an OpenAPI 3.0 or 3.1 document. OpenShield matches each request to an operation, validates its parameters when the headers arrive and its body when the body arrives, and fills the `schema_validation` fields. Rules decide what a violation means.
+When you load an OpenAPI 3.0 or 3.1 document, OpenShield validates requests against it and exposes the results through `schema_validation` fields. Parameter results are available to header rules, while body results become available after body inspection, allowing each phase's rules to decide whether to block.
+
+This WAF fragment uses the repository's `examples/openapi/petstore.yaml`; adjust the file path and host for your API:
 
 ```yaml
 schemas:
@@ -19,7 +21,7 @@ rulesets:
     rules:
       - id: unknown-endpoint
         action: block
-        expression: 'starts_with(http.request.uri.path, "/api/") and not schema_validation.operation.matched'
+        expression: 'schema_validation.schema == "petstore" and starts_with(http.request.uri.path, "/api/v1/") and not schema_validation.operation.matched'
         action_parameters: {response: {status_code: 404}}
       - id: invalid-parameters
         action: block
@@ -40,6 +42,8 @@ rulesets:
 
 The schema whose `hosts` include the request's `Host` (compared without port, case-insensitively) is used, else the first schema without `hosts`. Hosts no schema covers are not checked and leave the fields unset. The document's `servers` set the base path: with `servers: [{url: /v1}]`, operations are matched under `/v1`; server variables use their `default`.
 
+Because `hosts` selects a schema without limiting which requests a rule can match, the first rule checks the schema name before blocking an unknown endpoint. The `request_body` rule then enforces body validation for requests that pass the header checks.
+
 ## What is validated
 
 An operation is matched by method and path (`HEAD` falls back to `GET`); path segments are percent-decoded individually, so an encoded `/` stays inside its segment. Then:
@@ -48,7 +52,7 @@ An operation is matched by method and path (`HEAD` falls back to `GET`); path se
 - **Content-Type**, when the operation declares a request body and one is present or required.
 - **Body**, decoded as JSON, `application/x-www-form-urlencoded` or XML by media type and checked against the schema; other media types are only checked for presence.
 
-OpenAPI 3.0 `nullable` and boolean exclusive bounds are honoured, `readOnly` properties are not required of requests, local `$ref`s resolve. Undeclared query parameters are reported but are not violations. A body larger than `max_request_body_buffer` is a `body_size` violation rather than validated in part.
+Validation supports OpenAPI 3.0 `nullable`, boolean exclusive bounds, and local `$ref`s, while treating `readOnly` properties as optional in requests. Undeclared query parameters are reported without counting as violations. If a body exceeds `max_request_body_buffer`, it produces a `body_size` violation instead of being validated as a partial document.
 
 ## Fields
 
@@ -65,7 +69,7 @@ OpenAPI 3.0 `nullable` and boolean exclusive bounds are honoured, `readOnly` pro
 | `schema_validation.violation_details.error_detail` | String | What failed: `expected:integer`, `pattern_no_match`, `maximum`, … |
 | `schema_validation.violation_details.target` | String | The parameter name or JSON pointer |
 
-Parameter results are set with the headers; `body.violated_parameters` after body inspection. `violation_details` keep the first violation, parameters before body. On an unmatched operation, `violated` is `false` and the arrays are empty.
+Parameter results are populated with the headers, followed by `body.violated_parameters` after body inspection. The `violation_details` fields retain the first violation, giving parameter errors precedence over body errors. When no operation matches, `violated` remains `false` and the arrays stay empty, so rejecting unknown endpoints requires a separate rule.
 
 | `error_class` | Meaning |
 | --- | --- |
@@ -82,8 +86,11 @@ Parameter results are set with the headers; `body.violated_parameters` after bod
 ```text
 # Only type errors in the query string
 schema_validation.violation_details.location == "query" and schema_validation.violation_details.error_class == "invalid_type"
+```
 
-# Rate limit per operation rather than per path
+For a rule guarded by `schema_validation.operation.matched`, add:
+
+```yaml
 ratelimit:
   characteristics: [ip.src, schema_validation.operation.template]
 ```

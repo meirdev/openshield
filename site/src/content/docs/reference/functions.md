@@ -5,14 +5,14 @@ sidebar:
   order: 1
 ---
 
-Transforms and detection functions accept a string or an array of strings and apply element-wise to arrays; use `[*]` on the argument and `any` or `all` on the result.
+Transforms and detectors operate on strings, with `[*]` applying them to each element of an array. You can then combine boolean results with `any` or `all`. For functions that also accept arrays directly, the distinction matters: `len(array)` counts elements, while `len(array[*])` measures each element.
 
 ## Transforms
 
 | Function | Returns |
 | --- | --- |
 | `lower(s)`, `upper(s)` | ASCII case conversion |
-| `trim(s)`, `trim_start(s)`, `trim_end(s)` | Without surrounding, leading or trailing whitespace |
+| `trim(s)`, `trim_start(s)`, `trim_end(s)` | Without surrounding, leading or trailing ASCII whitespace |
 | `url_decode_uni(s)` | Percent-decoded, including `%uXXXX` |
 | `html_entity_decode(s)` | With HTML entities decoded |
 | `base64_decode(s)`, `base64_encode(s)` | Base64 decoding and encoding |
@@ -36,7 +36,7 @@ Transforms and detection functions accept a string or an array of strings and ap
 
 | Function | Returns |
 | --- | --- |
-| `len(s)` | Length in bytes |
+| `len(s)`, `len(array)` | String length in bytes, or number of array elements |
 | `starts_with(s, "prefix")`, `ends_with(s, "suffix")` | Boolean |
 | `regex_capture(s, "pattern")` | Array of capture groups; `[0]` is the whole match. The pattern is compiled once |
 | `concat(a, b, …)` | The strings joined |
@@ -58,9 +58,11 @@ Transforms and detection functions accept a string or an array of strings and ap
 | `except_matching(map, "regex", …)` | The map without the keys matching any pattern |
 
 ```text
-# A body parameter that is not one of the declared ones
-len(except(http.request.body.form, "user", "password").names) > 0
+# Inspect query values except those named "trusted".
+any(detect_sqli(except(http.request.uri.args, "trusted")[*][*]))
 ```
+
+Because `except` returns a map of arrays, the example uses `[*][*]` to reach each value. The `.names` and `.values` fields belong to the original request data and are not properties of the returned map.
 
 ## JSON
 

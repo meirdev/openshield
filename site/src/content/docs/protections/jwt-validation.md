@@ -44,11 +44,11 @@ rulesets:
 
 A source is an expression over the [request fields](../../reference/fields/) that evaluates to a string. Header names are lowercase; cookie names keep their case. The value may be the bare token or `Bearer ` followed by the token: a capital B and one space, nothing else is stripped.
 
-Sources are tried in order and the first *valid* token wins, so a stale token in a cookie does not hide a good one in the header.
+Sources are tried in order; the first valid token wins. An invalid earlier source does not prevent a later source from being checked.
 
 ## Keys
 
-Every key needs `kid` and `alg`. A token is verified only by the key whose `kid` and `alg` both match its header, which closes the algorithm-confusion attacks.
+Each key declares a `kid` and `alg`, and a token must match both header values to use that key. This prevents the token from selecting a different algorithm for it.
 
 | `kty` | `alg` | Requirements |
 | --- | --- | --- |
@@ -56,11 +56,11 @@ Every key needs `kid` and `alg`. A token is verified only by the key whose `kid`
 | `EC` | `ES256`, `ES384` | `crv` is `P-256` for `ES256`, `P-384` for `ES384`; public key only (`x`, `y`) |
 | `oct` | `HS256`, `HS384`, `HS512` | `k` is the shared secret, unpadded base64url, at least 32, 48 or 64 bytes |
 
-Quote a `kid` that YAML would read as a number. Keys come from the configuration only; there is no JWKS fetching. To rotate, add the new key beside the old, [reload](../../operations/running/#reload), and drop the old key once its tokens have expired. A weak or inconsistent key is a configuration error caught by `--test`.
+Keys are loaded from the configuration rather than fetched from a JWKS endpoint. To rotate one, add its replacement alongside it, [reload](../../operations/running/#reload), and remove the old key once its tokens have expired. Quote any `kid` that YAML would interpret as a number, and run `--test` to catch weak or inconsistent keys before reloading.
 
 ## What is checked
 
-1. The token's `kid` and `alg` select a key. No `kid`, or no key with that pair: invalid.
+1. The token's `kid` and `alg` must match a configured key; a missing `kid` or unmatched pair makes the token invalid.
 2. The signature verifies with that key.
 3. `exp` and `nbf`, when present, are checked with 60 seconds of clock skew. A token without `exp` does not expire.
 
@@ -71,7 +71,7 @@ Quote a `kid` that YAML would read as a number. Keys come from the configuration
 | Function | True when |
 | --- | --- |
 | `is_jwt_valid("id")` | The request carries a valid token for configuration `id` |
-| `is_jwt_present("id")` | Any token source has a value, valid or not |
+| `is_jwt_present("id")` | Any token source has a non-empty value, valid or not |
 
 The argument is a literal; an unknown `id` fails configuration validation.
 
@@ -79,7 +79,7 @@ The argument is a literal; an unknown `id` fails configuration validation.
 # Allow anonymous requests, reject invalid tokens
 is_jwt_present("api") and not is_jwt_valid("api")
 
-# Either of two issuers
+# Block unless either token configuration validates
 not (is_jwt_valid("api") or is_jwt_valid("partner"))
 ```
 
@@ -96,7 +96,7 @@ The registered claims of a valid token are fields, each a map keyed by configura
 | `http.request.jwt.claims.iat.sec` | `Map<Array<Integer>>` | Issued at, seconds since the epoch |
 | `http.request.jwt.claims.nbf.sec` | `Map<Array<Integer>>` | Not before, seconds since the epoch |
 
-Each has `.names` (the configurations whose token carries the claim) and `.values` (all values). Only valid tokens set them, and a claim of the wrong type is left out. Since a comparison on a missing field is false, write checks as conditions that must hold:
+Each claim field has companion `.names` and `.values` fields containing its configuration IDs and combined values. Because only valid tokens populate claims, wrapping a positive match in `not` rejects both missing and unexpected claims:
 
 ```text
 # Wrong issuer, or no token at all
@@ -104,8 +104,13 @@ not any(http.request.jwt.claims.iss["api"][*] == "https://issuer.example")
 
 # /admin/ needs the admin audience
 starts_with(http.request.uri.path, "/admin/") and not any(http.request.jwt.claims.aud["api"][*] == "admin")
+```
 
-# Rate limit per subject
+To rate limit by subject, add this to a rule that requires a valid token and a subject:
+
+```yaml
 ratelimit:
   characteristics: [http.request.jwt.claims.sub.values]
 ```
+
+The key combines subject values from all token configurations, so requests without a subject can share a counter. See [Rate limiting](../../rules/rate-limiting/) for how missing values affect the key.

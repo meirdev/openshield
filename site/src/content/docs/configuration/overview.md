@@ -20,7 +20,7 @@ logging:
 
 # WAF
 audit_log:
-  path: /var/log/openshield/audit.log
+  path: /dev/stderr
 lists:
   - name: office
     kind: ip
@@ -31,16 +31,18 @@ rulesets:
     rules:
       - id: office-only-admin
         action: block
-        expression: 'starts_with(http.request.uri.path, "/admin/") and not ip.src in $office'
+        expression: '(http.request.uri.path == "/admin" or starts_with(http.request.uri.path, "/admin/")) and not ip.src in $office'
 ```
 
-## Rules of thumb
+This rule protects both `/admin` and paths below `/admin/`, allowing access only from the `office` list. Replace its example addresses with the ones you intend to allow.
 
-- Only `listen` and `upstream` are required. Without a root ruleset, every request is forwarded uninspected.
-- Relative file paths resolve from the directory where OpenShield starts.
-- Unknown keys inside `logging`, `audit_log` and `metrics` are errors, so a typo cannot silently disable something.
-- Names must be unique within their kind: rulesets, rule IDs within a ruleset, lists, token configurations, schemas.
-- `openshield --test -c config.yaml` validates everything, including rule expressions, keys and schemas, without starting the proxy.
+## Loading and validation
+
+The proxy needs only `listen` and `upstream` to start forwarding traffic. To enforce a policy, add active rules to a root ruleset and give them distinct IDs. Rate-limit counters use those IDs, so reusing one can unintentionally share counts.
+
+Relative file paths resolve from the process's working directory. For example, when OpenShield starts in `/srv/app`, `file: ./openapi.yaml` resolves there even if the configuration is in `/etc/openshield`. Use absolute paths or a fixed working directory to keep this predictable.
+
+Before starting, run `openshield --test -c config.yaml` to validate and initialize the WAF without opening a listener. The check opens log files, so their directories must exist and be writable. It rejects unknown keys in `logging`, `audit_log`, and `metrics`, but does not catch every misspelled configuration key. See [Running](../../operations/running/#validate) for the scope of validation.
 
 ## Sections
 

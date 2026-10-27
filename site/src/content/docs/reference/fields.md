@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-A field is absent until the phase that provides it, and absent when its source is unavailable: GeoIP without databases, JWT claims without a valid token, schema fields on a host no schema covers. A comparison on an absent field is false.
+A field may be absent until its phase runs or because its source has no value. Equality and positive matching checks then return false, but `!=` can return true, so rules that require a value should account for [absent fields](../../rules/expressions/#absent-fields).
 
 ## Client
 
@@ -13,7 +13,7 @@ Available from `request_headers`.
 
 | Field | Type | Value |
 | --- | --- | --- |
-| `ip.src` | IP | Client address |
+| `ip.src` | IP | Host-provided client address; the standalone proxy uses its immediate TCP peer |
 | `ip.src.asnum` | Integer | Autonomous system number (GeoIP) |
 | `ip.src.country`, `ip.src.continent` | String | ISO codes (GeoIP) |
 | `ip.src.is_in_european_union` | Boolean | (GeoIP) |
@@ -53,13 +53,14 @@ Available from `request_body`.
 | Field | Type | Value |
 | --- | --- | --- |
 | `http.request.body.raw` | String | The body, up to the buffer limit |
-| `http.request.body.size` | Integer | Full size in bytes |
+| `http.request.body.size` | Integer | Bytes received when body fields were populated; may exclude later passthrough chunks |
 | `http.request.body.truncated` | Boolean | The body was larger than the buffer |
-| `http.request.body.mime` | String | The `Content-Type` |
+| `http.request.body.mime` | String | The `Content-Type`; available from `request_headers` |
 | `http.request.body.form` | Map<Array<String>> | Form fields by name (`application/x-www-form-urlencoded`) |
 | `http.request.body.form.names`, `.values` | Array<String> | |
 | `http.request.body.multipart` | Map<Array<String>> | Multipart parts by name |
-| `http.request.body.multipart.names`, `.values`, `.filenames`, `.content_types`, `.content_dispositions`, `.content_transfer_encodings` | Array<…> | Per part |
+| `http.request.body.multipart.values` | Array<String> | One value per part |
+| `http.request.body.multipart.names`, `.filenames`, `.content_types`, `.content_dispositions`, `.content_transfer_encodings` | Array<Array<String>> | One array per part: empty if absent, otherwise one value |
 
 ## Response
 
@@ -72,14 +73,14 @@ Available from `response_headers`; the body from `response_body`.
 | `http.response.headers` | Map<Array<String>> | Headers by lowercase name |
 | `http.response.headers.names`, `.values` | Array<String> | |
 | `http.response.body.raw` | String | The body, up to the buffer limit |
-| `http.response.body.size` | Integer | Full size |
+| `http.response.body.size` | Integer | Bytes received when body fields were populated; may exclude later passthrough chunks |
 | `http.response.body.truncated` | Boolean | Larger than the buffer |
 
 ## Detections
 
 | Field | Type | From |
 | --- | --- | --- |
-| `score.{name}` | Integer | A declared [score](../../rules/scores/); refreshed each phase |
+| `score.{name}` | Integer | A declared [score](../../rules/scores/); starts at zero and is refreshed at the start of each phase |
 | `http.request.jwt.claims.{iss,sub,aud,jti}` | Map<Array<String>> | [JWT validation](../../protections/jwt-validation/#claims), keyed by configuration |
 | `http.request.jwt.claims.{iat,nbf}.sec` | Map<Array<Integer>> | |
 | `schema_validation.*` | Various | [Schema validation](../../protections/schema-validation/#fields) |

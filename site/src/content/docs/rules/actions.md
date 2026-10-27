@@ -5,6 +5,8 @@ sidebar:
   order: 3
 ---
 
+A rule's action determines what happens when its expression matches. The available actions are:
+
 | Action | Effect |
 | --- | --- |
 | `block` | Stop the request and send a response; `403` with an empty body by default |
@@ -14,7 +16,7 @@ sidebar:
 | `challenge` | Require a [Turnstile verification](../../protections/turnstile-challenges/) before forwarding |
 | `execute` | Run a custom or managed [ruleset](../rulesets/#executing-a-ruleset) |
 
-Which actions take effect depends on the [phase](../phases/). With `detection_only: true`, `block` and `challenge` are logged but not enforced.
+When `block`, `allow`, or `challenge` matches, evaluation of the current phase ends. The `log` and `score` actions let it continue. This ordering also applies in detection-only mode, while the action's effect depends on the [phase](../phases/). Place the examples below under a root ruleset's `rules:`.
 
 ## The block response
 
@@ -29,7 +31,7 @@ Which actions take effect depends on the [phase](../phases/). With `detection_on
       content: "not found"
 ```
 
-Any status is allowed. In `response_body`, only `content` is used, since the status and headers are already sent.
+Use a valid HTTP status code in a request phase. In `response_body`, only `content` is used: the client has already received the status and headers. A response-body block without `content` suppresses the remaining body.
 
 ## Scores
 
@@ -47,7 +49,7 @@ Each `name` must be declared in the top-level `scores` list. `increment` default
 
 ## Allow
 
-`allow` ends the current phase for this request: later rules in the phase do not run, later phases still do. It is the way to exempt trusted clients from the detection rules that follow:
+`allow` ends the current phase; it does not exempt the request from later phases. The following fragment skips subsequent header-phase detections for clients in an `office` list. It assumes that list and a `detections` ruleset are configured:
 
 ```yaml
 - id: trusted
@@ -61,4 +63,4 @@ Each `name` must be declared in the top-level `scores` list. `increment` default
 
 ## Logging
 
-Every match is written to the audit log unless the rule says `logging: {enabled: false}`. Blocks and challenges are logged either way in the access log's `waf_action`.
+OpenShield collects logging-enabled matches into one audit record per request. Rules skipped during evaluation are absent, and rate-limited rules appear only when their limit is exceeded. Setting `logging: {enabled: false}` removes a rule from that record, but its terminal decision can still appear in `waf_action`; see [Logs](../../operations/logs/).

@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-`action: challenge` serves a [Turnstile](https://www.cloudflare.com/products/turnstile/) page instead of forwarding the request. A visitor who passes gets a signed cookie and is redirected back; later requests with the cookie go straight through.
+`action: challenge` serves a [Turnstile](https://www.cloudflare.com/products/turnstile/) page. Successful verification sets an IP-bound signed cookie and redirects the browser back. Replace the placeholder keys and secret below with your own values:
 
 ```yaml
 challenge:
@@ -20,9 +20,6 @@ rulesets:
       - id: challenge-admin
         action: challenge
         expression: 'starts_with(http.request.uri.path, "/admin/")'
-      - id: challenge-suspicious
-        action: challenge
-        expression: 'ip.src.country in {"XX" "YY"} and not ip.src in $office'
 ```
 
 | Setting | Default | Purpose |
@@ -35,7 +32,9 @@ rulesets:
 | `challenge_path` | `/__openshield/challenge` | Where the page posts the Turnstile token |
 | `custom_page` | Omitted | Your own HTML page |
 
-Challenges are served in `request_headers`; a `challenge` rule in a later phase only logs.
+Challenges are enforced only in `request_headers`. In later phases, a matching challenge still ends that phase's rule evaluation, but no challenge page is served.
+
+A challenge match ends header-rule evaluation even when the client has a valid cookie, so place mandatory blocking checks before it. Later phases still run, but the verification redirect does not replay an original POST body; use challenges on browser navigation paths rather than API submissions.
 
 ## Flow
 

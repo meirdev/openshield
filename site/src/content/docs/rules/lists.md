@@ -30,6 +30,8 @@ http.user_agent in $scanner_ua
 | --- | --- |
 | `ip` | The address equals an item or lies inside one of the CIDRs |
 | `string` | The whole value equals an item, case-sensitively |
-| `substring` | Any item occurs anywhere in the value, ASCII case-insensitively (an Aho-Corasick automaton, so size does not matter) |
+| `substring` | Any item occurs anywhere in the value, ASCII case-insensitively |
 
-Names are unique and `kind` is required; a misspelled kind is a configuration error. Lists are compiled at startup and shared by every request, so a list of a hundred thousand entries costs nothing per request.
+Names are unique and `kind` is required; a misspelled kind is a configuration error. Lists are compiled at startup and shared across requests. Substring lists use an Aho-Corasick matcher rather than checking each item separately, but matching still has a cost, and larger lists require more memory and startup work.
+
+For example, `sqlmap/1.7` matches `scanner_ua` but not `blocked_ua`: the first list looks for substrings, while the second requires the entire value to equal an item. To change a list, update the configuration and reload the host.

@@ -22,11 +22,21 @@ http.request.method == "POST" and not ip.src in $office
 | `in` | Membership in a set or list | `http.request.method in {"PUT" "DELETE"}`, `ip.src in $office` |
 | `and`, `or`, `not`, `xor` | Boolean logic; parentheses group | `(a or b) and not c` |
 
-Strings are double-quoted; inside YAML, wrap the expression in single quotes. Integers are plain, IPs and CIDRs are plain too: `ip.src in {10.0.0.0/8 192.168.1.1}`. Set literals use spaces between items.
+String literals use double quotes, so wrapping the whole expression in single quotes is convenient in YAML. Integers, IP addresses, and CIDRs do not need quotes, and set items are separated by spaces, as in `ip.src in {10.0.0.0/8 192.168.1.1}`.
 
 ## Absent fields
 
-A field with no value, such as `http.request.body.raw` before the body phase or `ip.src.country` without GeoIP, makes any comparison on it false, and `not` of that true. Write conditions as things that must hold: `not any(http.request.jwt.claims.aud["api"][*] == "admin")` blocks both tokens with the wrong audience and requests without a token.
+A field may be absent because its phase has not run or its source has no value. Equality and positive matching checks then return false, while `!=` can return true, so inequality is not a presence check. Use `has_key` to check a map entry or wrap a positive match in `not` to reject missing or unexpected claims:
+
+```text
+# Match when the Authorization header is absent.
+not has_key(http.request.headers, "authorization")
+
+# Match when no valid token supplies the required audience.
+not any(http.request.jwt.claims.aud["api"][*] == "admin")
+```
+
+The audience check matches missing or invalid tokens, missing audiences, and audiences without `admin`.
 
 ## Arrays and maps
 
@@ -42,10 +52,10 @@ any(http.request.cookies["session"][*] == "")
 
 ```text
 any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))
-all(len(http.request.headers.values[*]) < 4096)
+all(len(http.request.headers.values[*])[*] < 4096)
 ```
 
-Header names are lowercase; cookie and argument names keep their case. Every map has `.names` and `.values` arrays alongside it.
+Header lookups use lowercase names, while cookie and argument names retain their case. The `.names` and `.values` arrays are separately registered request fields, so they cannot be appended to a returned map. To iterate a filtered map's values, use `except(http.request.headers, "authorization")[*][*]` rather than `except(...).values`.
 
 ## Functions
 

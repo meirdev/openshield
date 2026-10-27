@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-With the two MaxMind databases configured, every request gets the `ip.src.*` fields:
+Configure both MaxMind databases to populate the available `ip.src.*` fields for each client address:
 
 ```yaml
 geoip:
@@ -29,4 +29,6 @@ ip.src.country in {"CN" "RU"} and http.request.uri.path contains "/admin"
 ip.src.asnum in {16509 14618} and not is_jwt_valid("api")
 ```
 
-Fields a database cannot resolve are absent, which makes comparisons on them false. GeoLite2 databases are free from MaxMind with an account; the paid GeoIP2 databases have the same layout. Databases are read at startup and after a [reload](../../operations/running/#reload).
+When a database cannot resolve an address, as is common for private and loopback addresses, its fields remain absent. Equality checks on those fields return false, while `!=` can return true, so account for missing results in your rules. Updated databases take effect at startup or after a [reload](../../operations/running/#reload).
+
+The standalone proxy looks up its immediate TCP peer, not an incoming `X-Forwarded-For` value. See [Client addresses](../../configuration/proxy/#client-addresses-and-forwarded-headers) when deploying behind another proxy.
