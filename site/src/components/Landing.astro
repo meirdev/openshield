@@ -1,149 +1,111 @@
 ---
-// The sections below the hero on the landing page.
 import { Code } from '@astrojs/starlight/components';
 
-const phases = [
-  ['request_headers', 'Client, URI, headers, cookies, arguments, JWT, schema parameters'],
-  ['request_body', 'Raw body, form fields, multipart parts, schema body'],
-  ['response_headers', 'Upstream status and headers'],
-  ['response_body', 'Upstream body'],
-  ['logging', 'Everything, for the record'],
+const paths = [
+  { number: '01', label: 'START HERE', title: 'Meet your firewall.', text: 'The big picture: how OpenShield works and where it fits in your stack.', link: 'getting-started/introduction/', action: 'Introduction', icon: 'M5 5h14v14H5zM9 5v14M9 9h10' },
+  { number: '02', label: 'GET HANDS-ON', title: 'Block your first attack.', text: 'Get the binary, write a configuration, and put a rule in front of your app.', link: 'getting-started/first-configuration/', action: 'Quickstart', icon: 'm13 3-8 11h6l-1 7 9-12h-7z' },
+  { number: '03', label: 'GO DEEPER', title: 'Learn the language.', text: 'Turn fields, functions, and a little logic into precisely the policy you need.', link: 'rules/expressions/', action: 'Explore expressions', icon: 'm8 5-6 7 6 7m8-14 6 7-6 7m-3-15-2 16' },
 ];
-
-const features = [
-  {
-    title: 'Rules in Wirefilter',
-    text: "Cloudflare's expression language. Match on any field, apply functions element-wise with [*], combine with any and all.",
-    icon: 'M4 7h16M4 12h10M4 17h7',
-  },
-  {
-    title: 'Injection detection',
-    text: 'SQL injection and XSS detection with libinjection, behind the transforms that undo how attackers encode payloads.',
-    icon: 'M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4zm-3 9l2 2 4-4',
-  },
-  {
-    title: 'JWT validation',
-    text: 'Verify tokens against the keys you configure. Claims become fields; a rule decides what a missing audience means.',
-    icon: 'M15 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM3 21v-1a6 6 0 0 1 6-6h2M16 17l2 2 4-4',
-  },
-  {
-    title: 'OpenAPI schema validation',
-    text: 'Requests checked against your OpenAPI document: parameters on arrival, bodies when they land, every violation a field.',
-    icon: 'M6 3h9l5 5v13H6zM14 3v6h6M9 13h6M9 17h6',
-  },
-  {
-    title: 'Scores, lists and rate limits',
-    text: 'Let weak signals add up. Keep IP and string lists of any size. Rate limit by IP, by token subject, by API operation.',
-    icon: 'M4 19V5M4 19h16M8 15l3-4 3 2 5-6',
-  },
-  {
-    title: 'Turnstile challenges',
-    text: 'Send suspicious clients through a Cloudflare Turnstile check, then let them through with a signed cookie.',
-    icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 5v5l3 3',
-  },
+const examples = [
+  { id: 'injection', label: 'Stop SQL injection', description: 'Decode the input. Detect the injection. Block the request.', code: `# Inside a root ruleset
+- id: block-sqli
+  action: block
+  expression: >-
+    any(detect_sqli(url_decode_uni(
+      http.request.uri.args.values[*])))`, request: "GET /search?q=1' OR '1'='1", result: '403 · Blocked', link: 'protections/injection-detection/' },
+  { id: 'jwt', label: 'Protect your API', description: 'Require a valid token for requests to your API.', code: `# Requires a JWT configuration named "api"
+- id: api-needs-token
+  action: block
+  expression: >-
+    starts_with(http.request.uri.path, "/api/")
+    and not is_jwt_valid("api")`, request: 'GET /api/orders · no token', result: '403 · Blocked', link: 'protections/jwt-validation/' },
+  { id: 'schema', label: 'Validate requests', description: 'Check requests against your OpenAPI schema, then choose what to enforce.', code: `# Requires an OpenAPI schema configuration
+- id: invalid-request
+  action: block
+  expression: >-
+    schema_validation.violated
+  action_parameters:
+    response: {status_code: 400}`, request: 'GET /items?limit=hello · expected integer', result: '400 · Blocked', link: 'protections/schema-validation/' },
 ];
-
-const fieldsRule = `# A detection's result is just a field
-starts_with(http.request.uri.path, "/admin/")
-  and not any(http.request.jwt.claims.aud["api"][*] == "admin")
-
-schema_validation.violated
-  and schema_validation.violation_details.location == "query"
-
-ip.src.country in {"CN" "RU"} and not ip.src in $office`;
-
+const topics = [
+  { number: '01', title: 'Configuration', text: 'Listeners, upstreams, TLS, and body inspection. Make it yours.', links: [['Overview', 'configuration/overview/'], ['Proxy settings', 'configuration/proxy/']] },
+  { number: '02', title: 'Rules & logic', text: 'Build a policy from expressions, actions, lists, and scores.', links: [['Rulesets', 'rules/rulesets/'], ['Rate limiting', 'rules/rate-limiting/']] },
+  { number: '03', title: 'Protections', text: 'Layer injection detection, token validation, and challenges.', links: [['Injection detection', 'protections/injection-detection/'], ['Turnstile', 'protections/turnstile-challenges/']] },
+  { number: '04', title: 'Reference', text: 'Every field and function, ready when you need the details.', links: [['Fields', 'reference/fields/'], ['Functions', 'reference/functions/']] },
+  { number: '05', title: 'Operations', text: 'Run, reload, and see exactly what your firewall is doing.', links: [['Running in production', 'operations/running/'], ['Metrics', 'operations/metrics/']] },
+  { number: '06', title: 'Request lifecycle', text: 'Five phases, from the first request header to the final log.', links: [['Understand phases', 'rules/phases/'], ['Audit logs', 'operations/logs/']] },
+];
 const hosts = [
-  {
-    title: 'The openshield proxy',
-    text: 'A reverse proxy on Cloudflare Pingora: TLS, HTTP/2, connection pooling, zero-downtime reloads, Prometheus metrics.',
-    href: 'hosts/pingora-proxy/',
-  },
-  {
-    title: 'The nginx module',
-    text: 'The same WAF inside nginx, switched on per location, with shared-memory rate limits across workers.',
-    href: 'hosts/nginx-module/',
-  },
-  {
-    title: 'The library',
-    text: 'openshield-core, the engine itself, with no runtime or networking dependency. Embed it in your own server.',
-    href: 'hosts/library/',
-  },
+  { number: '01', title: 'Standalone proxy', tag: 'POWERED BY PINGORA', text: 'A reverse proxy with TLS, HTTP/2, connection pooling, and zero-downtime reloads.', link: 'hosts/pingora-proxy/' },
+  { number: '02', title: 'Inside nginx', tag: 'AT HOME IN YOUR STACK', text: 'The same engine, enabled per location, with shared rate limits across workers.', link: 'hosts/nginx-module/' },
+  { number: '03', title: 'In your Rust app', tag: 'EMBED THE CORE', text: 'Bring the rule engine into your own server with openshield-core.', link: 'hosts/library/' },
 ];
 ---
 
-<section class="os-section os-phases" aria-labelledby="phases-title">
-  <h2 id="phases-title">Five phases, one request</h2>
-  <p class="os-section-lead">
-    A rule runs in the phase where its data exists, so a block in <code>request_headers</code> costs
-    nothing further and a body rule never waits for a body it does not need.
-  </p>
-  <ol class="os-phase-track">
-    {
-      phases.map(([name, text], i) => (
-        <li>
-          <span class="os-phase-index">{String(i + 1).padStart(2, '0')}</span>
-          <code class="os-phase-name">{name}</code>
-          <p>{text}</p>
-        </li>
-      ))
-    }
-  </ol>
-</section>
+<div class="not-content os-landing">
+  <nav class="os-start-grid" aria-label="Start exploring">
+    {paths.map(({ number, label, title, text, link, action, icon }) => (
+      <a class="os-start-card" href={link}>
+        <div class="os-card-top"><span>{number} / {label}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon} /></svg></div>
+        <h2>{title}</h2><p>{text}</p><span class="os-card-link">{action}<span aria-hidden="true">↗</span></span>
+      </a>
+    ))}
+  </nav>
 
-<section class="os-section" aria-labelledby="features-title">
-  <h2 id="features-title">What it does</h2>
-  <ul class="os-features">
-    {
-      features.map(({ title, text, icon }) => (
-        <li class="os-feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d={icon} />
-          </svg>
-          <h3>{title}</h3>
-          <p>{text}</p>
-        </li>
-      ))
-    }
-  </ul>
-</section>
+  <section class="os-section os-rules" aria-labelledby="rules-title">
+    <div class="os-rule-copy">
+      <p class="os-eyebrow">READABLE BY DESIGN</p>
+      <h2 id="rules-title">Powerful protection.<br /><span>Plainly expressed.</span></h2>
+      <p>Every decision starts with a rule. Combine what you know about a request with what you want to do about it.</p>
+      <p>No hidden policy. Just your configuration.</p>
+      <a class="os-text-link" href="rules/rulesets/">How rules work <span aria-hidden="true">↗</span></a>
+    </div>
+    <div class="os-rule-browser">
+      <div class="os-example-controls" role="group" aria-label="Choose a rule example">
+        {examples.map(({ id, label }, i) => <button type="button" data-example={id} aria-pressed={i === 0} aria-controls={`example-${id}`}>{label}</button>)}
+      </div>
+      {examples.map(({ id, description, code, request, result, link }, i) => (
+        <section id={`example-${id}`} class="os-example" hidden={i !== 0} aria-label={description}>
+          <div class="os-code-caption"><span><span aria-hidden="true">≡</span> rules.yaml</span><span>RULE EXCERPT</span></div>
+          <Code code={code} lang="yaml" />
+          <div class="os-rule-result"><span>EXAMPLE REQUEST</span><code>{request}</code><strong>{result}</strong></div>
+          <div class="os-example-explanation"><p>{description}</p><a href={link}>Read the guide <span aria-hidden="true">↗</span></a></div>
+        </section>
+      ))}
+      <noscript><p class="os-no-script">More examples: <a href="protections/jwt-validation/">JWT validation</a> · <a href="protections/schema-validation/">Schema validation</a></p></noscript>
+    </div>
+  </section>
 
-<section class="os-section os-split" aria-labelledby="fields-title">
-  <div>
-    <h2 id="fields-title">Detections become fields.<br />Rules decide.</h2>
-    <p class="os-section-lead">
-      JWT validation, schema validation and GeoIP do not block anything by themselves. They fill
-      fields, and a rule says what a missing audience, a wrong type or an unexpected country means
-      for this request. One language covers every signal, and every decision is in your config.
-    </p>
-    <a href="rules/expressions/" class="os-link">Read about expressions →</a>
-  </div>
-  <div class="os-window">
-    <div class="os-window-bar"><span></span><span></span><span></span><em>expressions</em></div>
-    <Code code={fieldsRule} lang="text" />
-  </div>
-</section>
+  <section class="os-section" aria-labelledby="explore-title">
+    <div class="os-section-heading"><div><p class="os-eyebrow">THE DOCUMENTATION</p><h2 id="explore-title">Find your next move.</h2></div><p>From the first config to the finer details.</p></div>
+    <div class="os-topic-grid">
+      {topics.map(({ number, title, text, links }) => (
+        <section class="os-topic"><span class="os-topic-number">{number}</span><div><h3>{title}</h3><p>{text}</p><ul>{links.map(([label, href]) => <li><a href={href}>{label}<span aria-hidden="true">↗</span></a></li>)}</ul></div></section>
+      ))}
+    </div>
+  </section>
 
-<section class="os-section" aria-labelledby="hosts-title">
-  <h2 id="hosts-title">Runs where you need it</h2>
-  <ul class="os-hosts">
-    {
-      hosts.map(({ title, text, href }) => (
-        <li>
-          <a href={href}>
-            <h3>{title}</h3>
-            <p>{text}</p>
-          </a>
-        </li>
-      ))
-    }
-  </ul>
-</section>
+  <section class="os-section" aria-labelledby="hosts-title">
+    <div class="os-section-heading"><div><p class="os-eyebrow">ONE ENGINE. YOUR ENVIRONMENT.</p><h2 id="hosts-title">Fits into your architecture.</h2></div><p>The same YAML. Wherever you run it.</p></div>
+    <div class="os-host-grid">{hosts.map(({ number, title, tag, text, link }) => (
+      <a class="os-host" href={link}><div class="os-host-top"><span>{number}</span><span aria-hidden="true">↗</span></div><p class="os-host-tag">{tag}</p><h3>{title}</h3><p>{text}</p></a>
+    ))}</div>
+  </section>
 
-<section class="os-section os-cta">
-  <h2>Put it in front of something.</h2>
-  <p>Ten lines of YAML and a binary. The example in the repository has a configuration that uses every feature and an application to run it against.</p>
-  <div class="os-actions">
-    <a href="getting-started/first-configuration/" class="os-button os-button-primary">Your first configuration</a>
-    <a href="https://github.com/meirdev/openshield/tree/main/examples" class="os-button os-button-ghost">The example</a>
-  </div>
-</section>
+  <section class="os-cta" aria-labelledby="cta-title"><div><p class="os-eyebrow">LET’S PUT IT TO WORK</p><h2 id="cta-title">A little YAML.<br />A lot more control.</h2><p>Your first configuration is a good place to start.</p></div><a href="getting-started/first-configuration/" class="os-button">Build your first configuration <span aria-hidden="true">↗</span></a><span class="os-cta-decoration" aria-hidden="true">{'{ }'}</span></section>
+  <footer class="os-footer"><span>OpenShield <span class="os-footer-divider">/</span> Open source. Open by design.</span><a href="https://github.com/meirdev/openshield">View source on GitHub <span aria-hidden="true">↗</span></a></footer>
+</div>
+
+<script>
+  const controls = document.querySelectorAll<HTMLButtonElement>('[data-example]');
+  controls.forEach((button) => {
+    button.addEventListener('click', () => {
+      controls.forEach((control) => {
+        const active = control === button;
+        control.setAttribute('aria-pressed', String(active));
+        const panel = document.getElementById(`example-${control.dataset.example}`);
+        if (panel) panel.hidden = !active;
+      });
+    });
+  });
+</script>
