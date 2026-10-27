@@ -1,0 +1,67 @@
+---
+const { data } = Astro.locals.starlightRoute.entry;
+const { tagline, actions = [] } = data.hero || {};
+const isHome = data.title === 'OpenShield';
+const home = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+---
+
+{!isHome ? <section class="os-error">
+  <p class="os-eyebrow">THE OPENSHIELD FIELD GUIDE</p>
+  <h1 id="_top" data-page-title>{data.title}</h1>
+  {tagline && <p class="os-tagline">{tagline}</p>}
+  <div class="os-actions">{actions.map(({ link, text }) => <a class="os-button os-button-primary" href={link === './' ? home : link}>{text}<span aria-hidden="true">↗</span></a>)}</div>
+</section> : <>
+<section class="os-hero" aria-labelledby="_top">
+  <div class="os-hero-copy">
+    <p class="os-eyebrow"><span class="os-status-dot"></span> THE OPENSHIELD FIELD GUIDE</p>
+    <h1 id="_top" data-page-title>Your traffic.<br /><span>Your rules.</span></h1>
+    {tagline && <p class="os-tagline">{tagline}</p>}
+    <div class="os-actions">
+      {actions.map(({ link, text, variant }) => (
+        <a href={link} class:list={['os-button', variant === 'minimal' ? 'os-button-secondary' : 'os-button-primary']}>
+          {text}<span aria-hidden="true">↗</span>
+        </a>
+      ))}
+    </div>
+    <p class="os-hero-note">Open source. Written in Rust. Built to be understood.</p>
+  </div>
+
+  <div class="os-blueprint" role="img" aria-label="Request flow: incoming traffic passes through OpenShield rules. Allowed requests reach your application; blocked requests stop at the firewall.">
+    <div class="os-blueprint-heading"><span>REQUEST / RESPONSE</span><span>FIG. 01</span></div>
+    <svg viewBox="0 0 480 330" fill="none" aria-hidden="true">
+      <defs>
+        <pattern id="os-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" stroke="currentColor" stroke-opacity=".1" /></pattern>
+      </defs>
+      <rect width="480" height="330" fill="url(#os-grid)" />
+      <circle cx="240" cy="158" r="111" stroke="currentColor" stroke-opacity=".2" />
+      <circle cx="240" cy="158" r="88" stroke="currentColor" stroke-opacity=".3" stroke-dasharray="3 7" />
+      <path d="M32 158H172M308 158H448" stroke="currentColor" stroke-opacity=".5" />
+      <path d="M240 230V290H352" stroke="currentColor" stroke-opacity=".5" stroke-dasharray="4 5" />
+      <path d="m159 153 6 5-6 5m274-10 6 5-6 5" stroke="currentColor" />
+      <rect x="21" y="144" width="28" height="28" rx="7" fill="#214ce5" stroke="currentColor" />
+      <path d="M29 153h12m-12 5h12m-12 5h8" stroke="currentColor" />
+      <rect x="431" y="144" width="28" height="28" rx="7" fill="#c7f284" stroke="#c7f284" />
+      <path d="m438 158 5 5 9-10" stroke="#182b16" stroke-width="2" />
+      <path d="m240 79 65 24v53c0 49-65 78-65 78s-65-29-65-78v-53l65-24Z" fill="#214ce5" stroke="currentColor" stroke-width="1.5" />
+      <path d="m240 91 54 20v45c0 37-54 65-54 65s-54-28-54-65v-45l54-20Z" stroke="currentColor" stroke-opacity=".25" />
+      <path d="M211 136h44m-44 19h58m-58 19h32" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+      <circle cx="255" cy="136" r="5" fill="#c7f284" /><circle cx="269" cy="155" r="5" fill="#c7f284" /><circle cx="243" cy="174" r="5" fill="#c7f284" />
+      <circle cx="352" cy="290" r="11" fill="#214ce5" stroke="currentColor" />
+      <path d="m348 286 8 8m0-8-8 8" stroke="currentColor" />
+      <circle class="os-packet os-packet-in" cx="83" cy="158" r="4" fill="currentColor" />
+      <circle class="os-packet os-packet-out" cx="352" cy="158" r="4" fill="#c7f284" />
+      <g fill="currentColor" font-family="'IBM Plex Mono', monospace" font-size="10" letter-spacing="1">
+        <text x="18" y="193">TRAFFIC</text><text x="396" y="193">YOUR APP</text>
+        <text x="240" y="53" text-anchor="middle">INSPECT. EVALUATE. ENFORCE.</text>
+        <text x="240" y="258" text-anchor="middle">OPENSHIELD</text><text x="370" y="294">BLOCK</text>
+      </g>
+    </svg>
+    <div class="os-blueprint-footer"><span><i></i> Rules you can read</span><span>Decisions you control</span></div>
+  </div>
+</section>
+
+<div class="os-foundations" aria-label="Built with">
+  <span>SMALL CORE. SOLID FOUNDATIONS.</span>
+  <div><strong>Rust</strong><span class="os-foundation-plus">+</span><strong>Cloudflare Pingora</strong><span class="os-foundation-plus">+</span><strong>Wirefilter</strong></div>
+</div>
+</>}

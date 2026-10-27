@@ -60,4 +60,4 @@ Check a changed configuration without starting the proxy:
 
 ## Not included
 
-Turnstile challenges need site and secret keys from Cloudflare; see [docs/challenges.md](../docs/challenges.md) to add a `challenge` block and a rule with `action: challenge`.
+Turnstile challenges need site and secret keys from Cloudflare; see [Turnstile challenges](https://meirdev.github.io/openshield/protections/turnstile-challenges/) to add a `challenge` block and a rule with `action: challenge`.
