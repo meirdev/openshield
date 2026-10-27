@@ -1,11 +1,8 @@
 name: Site
 
+# Runs only when started by hand from the Actions tab. Restore the `push`
+# trigger to publish on every change to `site/`.
 on:
-  push:
-    branches: [main]
-    paths:
-      - site/**
-      - .github/workflows/site.yml
   workflow_dispatch:
 
 permissions:
