@@ -1,0 +1,149 @@
+---
+// The sections below the hero on the landing page.
+import { Code } from '@astrojs/starlight/components';
+
+const phases = [
+  ['request_headers', 'Client, URI, headers, cookies, arguments, JWT, schema parameters'],
+  ['request_body', 'Raw body, form fields, multipart parts, schema body'],
+  ['response_headers', 'Upstream status and headers'],
+  ['response_body', 'Upstream body'],
+  ['logging', 'Everything, for the record'],
+];
+
+const features = [
+  {
+    title: 'Rules in Wirefilter',
+    text: "Cloudflare's expression language. Match on any field, apply functions element-wise with [*], combine with any and all.",
+    icon: 'M4 7h16M4 12h10M4 17h7',
+  },
+  {
+    title: 'Injection detection',
+    text: 'SQL injection and XSS detection with libinjection, behind the transforms that undo how attackers encode payloads.',
+    icon: 'M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4zm-3 9l2 2 4-4',
+  },
+  {
+    title: 'JWT validation',
+    text: 'Verify tokens against the keys you configure. Claims become fields; a rule decides what a missing audience means.',
+    icon: 'M15 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM3 21v-1a6 6 0 0 1 6-6h2M16 17l2 2 4-4',
+  },
+  {
+    title: 'OpenAPI schema validation',
+    text: 'Requests checked against your OpenAPI document: parameters on arrival, bodies when they land, every violation a field.',
+    icon: 'M6 3h9l5 5v13H6zM14 3v6h6M9 13h6M9 17h6',
+  },
+  {
+    title: 'Scores, lists and rate limits',
+    text: 'Let weak signals add up. Keep IP and string lists of any size. Rate limit by IP, by token subject, by API operation.',
+    icon: 'M4 19V5M4 19h16M8 15l3-4 3 2 5-6',
+  },
+  {
+    title: 'Turnstile challenges',
+    text: 'Send suspicious clients through a Cloudflare Turnstile check, then let them through with a signed cookie.',
+    icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 5v5l3 3',
+  },
+];
+
+const fieldsRule = `# A detection's result is just a field
+starts_with(http.request.uri.path, "/admin/")
+  and not any(http.request.jwt.claims.aud["api"][*] == "admin")
+
+schema_validation.violated
+  and schema_validation.violation_details.location == "query"
+
+ip.src.country in {"CN" "RU"} and not ip.src in $office`;
+
+const hosts = [
+  {
+    title: 'The openshield proxy',
+    text: 'A reverse proxy on Cloudflare Pingora: TLS, HTTP/2, connection pooling, zero-downtime reloads, Prometheus metrics.',
+    href: 'hosts/pingora-proxy/',
+  },
+  {
+    title: 'The nginx module',
+    text: 'The same WAF inside nginx, switched on per location, with shared-memory rate limits across workers.',
+    href: 'hosts/nginx-module/',
+  },
+  {
+    title: 'The library',
+    text: 'openshield-core, the engine itself, with no runtime or networking dependency. Embed it in your own server.',
+    href: 'hosts/library/',
+  },
+];
+---
+
+<section class="os-section os-phases" aria-labelledby="phases-title">
+  <h2 id="phases-title">Five phases, one request</h2>
+  <p class="os-section-lead">
+    A rule runs in the phase where its data exists, so a block in <code>request_headers</code> costs
+    nothing further and a body rule never waits for a body it does not need.
+  </p>
+  <ol class="os-phase-track">
+    {
+      phases.map(([name, text], i) => (
+        <li>
+          <span class="os-phase-index">{String(i + 1).padStart(2, '0')}</span>
+          <code class="os-phase-name">{name}</code>
+          <p>{text}</p>
+        </li>
+      ))
+    }
+  </ol>
+</section>
+
+<section class="os-section" aria-labelledby="features-title">
+  <h2 id="features-title">What it does</h2>
+  <ul class="os-features">
+    {
+      features.map(({ title, text, icon }) => (
+        <li class="os-feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d={icon} />
+          </svg>
+          <h3>{title}</h3>
+          <p>{text}</p>
+        </li>
+      ))
+    }
+  </ul>
+</section>
+
+<section class="os-section os-split" aria-labelledby="fields-title">
+  <div>
+    <h2 id="fields-title">Detections become fields.<br />Rules decide.</h2>
+    <p class="os-section-lead">
+      JWT validation, schema validation and GeoIP do not block anything by themselves. They fill
+      fields, and a rule says what a missing audience, a wrong type or an unexpected country means
+      for this request. One language covers every signal, and every decision is in your config.
+    </p>
+    <a href="rules/expressions/" class="os-link">Read about expressions →</a>
+  </div>
+  <div class="os-window">
+    <div class="os-window-bar"><span></span><span></span><span></span><em>expressions</em></div>
+    <Code code={fieldsRule} lang="text" />
+  </div>
+</section>
+
+<section class="os-section" aria-labelledby="hosts-title">
+  <h2 id="hosts-title">Runs where you need it</h2>
+  <ul class="os-hosts">
+    {
+      hosts.map(({ title, text, href }) => (
+        <li>
+          <a href={href}>
+            <h3>{title}</h3>
+            <p>{text}</p>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</section>
+
+<section class="os-section os-cta">
+  <h2>Put it in front of something.</h2>
+  <p>Ten lines of YAML and a binary. The example in the repository has a configuration that uses every feature and an application to run it against.</p>
+  <div class="os-actions">
+    <a href="getting-started/first-configuration/" class="os-button os-button-primary">Your first configuration</a>
+    <a href="https://github.com/meirdev/openshield/tree/main/examples" class="os-button os-button-ghost">The example</a>
+  </div>
+</section>

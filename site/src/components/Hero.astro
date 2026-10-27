@@ -1,0 +1,68 @@
+---
+// The landing page hero, replacing Starlight's. Starlight renders a Hero on
+// pages with `hero` front matter; only the landing page has one.
+import { Code } from '@astrojs/starlight/components';
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { tagline, actions = [] } = data.hero || {};
+
+const rule = `rules:
+  - id: api-needs-token
+    action: block
+    expression: >-
+      starts_with(http.request.uri.path, "/api/")
+      and not is_jwt_valid("api")
+  - id: injection
+    action: block
+    expression: >-
+      any(detect_sqli(url_decode_uni(
+        http.request.uri.args.values[*])))`;
+---
+
+<section class="os-hero">
+  <div class="os-hero-copy">
+    <p class="os-eyebrow">
+      <span class="os-eyebrow-dot"></span>
+      Open source · Rust · built on Pingora and Wirefilter
+    </p>
+    <h1 id="_top" data-page-title>
+      A web application firewall <span class="os-gradient-text">written as rules you can read.</span>
+    </h1>
+    {tagline && <p class="os-tagline" set:html={tagline} />}
+    <div class="os-actions">
+      {
+        actions.map(({ link, text, variant }) => (
+          <a href={link} class:list={['os-button', variant === 'minimal' ? 'os-button-ghost' : 'os-button-primary']}>
+            {text}
+          </a>
+        ))
+      }
+    </div>
+    <div class="os-install">
+      <span class="os-install-prompt">$</span>
+      <code>cargo build --release &amp;&amp; ./target/release/openshield -c config.yaml</code>
+    </div>
+  </div>
+
+  <div class="os-hero-panel">
+    <div class="os-window">
+      <div class="os-window-bar">
+        <span></span><span></span><span></span>
+        <em>config.yaml</em>
+      </div>
+      <Code code={rule} lang="yaml" />
+    </div>
+    <div class="os-window os-window-log">
+      <div class="os-window-bar">
+        <span></span><span></span><span></span>
+        <em>audit.log</em>
+      </div>
+      <pre class="os-log"><span class="os-log-time">09:44:33.326</span> <span class="os-log-block">block</span> 198.51.100.7 "GET /search?q=1'+OR+'1'='1" -> <span class="os-log-status">403</span>
+  rules: <span class="os-log-rule">injection:block</span>
+  payload http.request.uri.args.values: ["1' OR '1'='1"]
+<span class="os-log-time">09:44:35.102</span> <span class="os-log-block">block</span> 203.0.113.9 "GET /api/orders" -> <span class="os-log-status">401</span>
+  rules: <span class="os-log-rule">api-needs-token:block</span>
+<span class="os-log-time">09:44:35.418</span> <span class="os-log-pass">pass</span> 203.0.113.9 "GET /api/orders" -> 200<span class="os-cursor"></span></pre>
+    </div>
+  </div>
+</section>

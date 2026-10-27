@@ -1,0 +1,206 @@
+/* OpenShield documentation theme.
+   Palette from the logo: electric blue to cyan on deep navy. */
+
+:root {
+  --os-blue: #1d4fe6;
+  --os-blue-bright: #3b7bff;
+  --os-cyan: #1ac6f5;
+  --os-gradient: linear-gradient(120deg, #2f6bff 0%, #1ac6f5 100%);
+
+  --sl-font: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --sl-font-display: 'Space Grotesk Variable', var(--sl-font);
+
+  /* Dark theme, the default. */
+  --sl-color-accent-low: #10265f;
+  --sl-color-accent: #3b7bff;
+  --sl-color-accent-high: #bfd9ff;
+  --sl-color-white: #f4f7fd;
+  --sl-color-gray-1: #dfe6f3;
+  --sl-color-gray-2: #b4c0d8;
+  --sl-color-gray-3: #7d8cac;
+  --sl-color-gray-4: #46547a;
+  --sl-color-gray-5: #253052;
+  --sl-color-gray-6: #121a33;
+  --sl-color-black: #0a1024;
+  --sl-color-bg-nav: rgba(10, 16, 36, 0.85);
+  --sl-color-bg-sidebar: #0c1329;
+  --sl-color-hairline: #1c2645;
+  --sl-color-hairline-light: #1c2645;
+  --sl-color-hairline-shade: #0a1024;
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: var(--sl-color-accent-high);
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #e2ebff;
+  --sl-color-accent: #1d4fe6;
+  --sl-color-accent-high: #0f2a6b;
+  --sl-color-white: #0a1024;
+  --sl-color-gray-1: #1b2440;
+  --sl-color-gray-2: #2f3b5e;
+  --sl-color-gray-3: #5f6d93;
+  --sl-color-gray-4: #9aa6c3;
+  --sl-color-gray-5: #d9e0ee;
+  --sl-color-gray-6: #f1f4fa;
+  --sl-color-gray-7: #f8fafd;
+  --sl-color-black: #ffffff;
+  --sl-color-bg-nav: rgba(255, 255, 255, 0.85);
+  --sl-color-bg-sidebar: #f8fafd;
+  --sl-color-hairline: #e1e6f0;
+  --sl-color-hairline-light: #e1e6f0;
+  --sl-color-hairline-shade: #f1f4fa;
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: var(--sl-color-accent);
+}
+
+/* Header: translucent, blurred. */
+header.header {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+.site-title {
+  font-family: var(--sl-font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--sl-color-white);
+  gap: 0.6rem;
+}
+.site-title img {
+  height: 1.75rem;
+  width: auto;
+}
+
+/* Headings in the display face. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.sl-markdown-content h4,
+h1[data-page-title] {
+  font-family: var(--sl-font-display);
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+}
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+.sl-markdown-content .sl-heading-wrapper.level-h2 > h2 {
+  margin-top: 0;
+}
+
+/* Page title with a short gradient trace under it. */
+h1[data-page-title] {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  padding-bottom: 1rem;
+  position: relative;
+}
+h1[data-page-title]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 3.5rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--os-gradient);
+}
+[data-has-hero] h1[data-page-title]::after {
+  display: none;
+}
+
+/* Sidebar: small-caps group labels, current page marked by a node. */
+.sidebar-content .top-level > li > details > summary .large {
+  font-family: var(--sl-font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content a {
+  border-radius: 0.4rem;
+  font-size: 0.92rem;
+}
+.sidebar-content a[aria-current='page'] {
+  background: transparent;
+  color: var(--sl-color-white);
+  font-weight: 600;
+  position: relative;
+  padding-inline-start: 1.3rem;
+}
+.sidebar-content a[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: 0.45rem;
+  top: 50%;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: var(--os-cyan);
+  box-shadow: 0 0 0 3px rgba(26, 198, 245, 0.22);
+}
+
+/* Right-hand table of contents. */
+.right-sidebar h2 {
+  font-family: var(--sl-font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.right-sidebar a[aria-current='true'] {
+  color: var(--sl-color-text-accent);
+}
+
+/* Code: softer frames with the trace on the left. */
+.expressive-code .frame {
+  border-radius: 0.65rem;
+  box-shadow: none;
+  border-left: 3px solid var(--os-blue-bright);
+}
+.sl-markdown-content code:not(:where(.expressive-code *)) {
+  border-radius: 0.3rem;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-hairline);
+}
+
+/* Tables: lighter rules, display face in headers. */
+.sl-markdown-content table {
+  font-size: 0.92rem;
+}
+.sl-markdown-content th {
+  font-family: var(--sl-font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+.sl-markdown-content td {
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+.sl-markdown-content tr:nth-child(2n) {
+  background: transparent;
+}
+
+/* Links in prose. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 0.15em;
+}
+
+/* Pagination cards. */
+.pagination-links a {
+  border-radius: 0.75rem;
+  border-color: var(--sl-color-hairline);
+  box-shadow: none;
+}
+.pagination-links a:hover {
+  border-color: var(--sl-color-accent);
+}

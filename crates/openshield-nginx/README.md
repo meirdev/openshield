@@ -19,5 +19,3 @@ http {
     }
 }
 ```
-
-See [docs/nginx.md](../../docs/nginx.md) for the directives, variables, what is covered, and how to build against your nginx.
