@@ -56,7 +56,7 @@ For a configuration that uses every feature, with an application to run it again
 
 ## Documentation
 
-The documentation lives at [meirdev.github.io/openshield](https://meirdev.github.io/openshield/). To run it locally, with [bun](https://bun.sh) installed:
+To run it locally, with [bun](https://bun.sh) installed:
 
 ```bash
 cd site
