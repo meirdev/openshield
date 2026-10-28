@@ -61,6 +61,26 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
         BytesTransformFunction::new("replace_comments", string::replace_comments),
     )
     .unwrap();
+    b.add_function(
+        "remove_comments",
+        BytesTransformFunction::new("remove_comments", string::remove_comments),
+    )
+    .unwrap();
+    b.add_function(
+        "cmd_line",
+        BytesTransformFunction::new("cmd_line", string::cmd_line),
+    )
+    .unwrap();
+    b.add_function(
+        "normalize_path",
+        BytesTransformFunction::new("normalize_path", string::normalize_path),
+    )
+    .unwrap();
+    b.add_function(
+        "normalize_path_win",
+        BytesTransformFunction::new("normalize_path_win", string::normalize_path_win),
+    )
+    .unwrap();
 
     // String functions (non-polymorphic)
     b.add_function("len", generic::LenFunction).unwrap();
@@ -101,6 +121,21 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
     b.add_function(
         "html_entity_decode",
         BytesTransformFunction::new("html_entity_decode", decode::html_entity_decode),
+    )
+    .unwrap();
+    b.add_function(
+        "js_decode",
+        BytesTransformFunction::new("js_decode", decode::js_decode),
+    )
+    .unwrap();
+    b.add_function(
+        "css_decode",
+        BytesTransformFunction::new("css_decode", decode::css_decode),
+    )
+    .unwrap();
+    b.add_function(
+        "escape_seq_decode",
+        BytesTransformFunction::new("escape_seq_decode", decode::escape_seq_decode),
     )
     .unwrap();
 
