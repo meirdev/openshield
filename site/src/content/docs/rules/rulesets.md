@@ -20,25 +20,25 @@ rulesets:
 
 ## A rule
 
-| Field | Default | Description |
-| --- | --- | --- |
-| `id` | Required | Identifies the rule in logs and rate-limit counters; use distinct IDs |
-| `action` | Required | What to do on a match; see [Actions](../actions/) |
-| `expression` | Required | A [Wirefilter expression](../expressions/) |
-| `phase` | `request_headers` | When the rule runs; see [Phases](../phases/) |
-| `action_parameters` | Omitted | Details for the action: the block response, scores to add, the ruleset to execute |
-| `ratelimit` | Omitted | Count matches per key and act only past a limit; see [Rate limiting](../rate-limiting/) |
-| `logging.enabled` | `true` | Record matches in the audit log |
-| `enabled` | `true` | `false` skips the rule |
-| `categories` | `[]` | Tags that `execute` overrides can target |
-| `description`, `ref`, `version` | Omitted | Documentation: free text, an external reference such as a URL, a version |
+| Field                           | Default           | Description                                                                             |
+| ------------------------------- | ----------------- | --------------------------------------------------------------------------------------- |
+| `id`                            | Required          | Identifies the rule in logs and rate-limit counters; use distinct IDs                   |
+| `action`                        | Required          | What to do on a match; see [Actions](../actions/)                                       |
+| `expression`                    | Required          | A [Wirefilter expression](../expressions/)                                              |
+| `phase`                         | `request_headers` | When the rule runs; see [Phases](../phases/)                                            |
+| `action_parameters`             | Omitted           | Details for the action: the block response, scores to add, the ruleset to execute       |
+| `ratelimit`                     | Omitted           | Count matches per key and act only past a limit; see [Rate limiting](../rate-limiting/) |
+| `logging.enabled`               | `true`            | Record matches in the audit log                                                         |
+| `enabled`                       | `true`            | `false` skips the rule                                                                  |
+| `categories`                    | `[]`              | Tags that `execute` overrides can target                                                |
+| `description`, `ref`, `version` | Omitted           | Documentation: free text, an external reference such as a URL, a version                |
 
 ## Rulesets
 
-| `kind` | Runs |
-| --- | --- |
-| `root` | On every request, in configuration order |
-| `custom` | Only when a root rule executes it. The default |
+| `kind`    | Runs                                                                               |
+| --------- | ---------------------------------------------------------------------------------- |
+| `root`    | On every request, in configuration order                                           |
+| `custom`  | Only when a root rule executes it. The default                                     |
 | `managed` | Same as `custom`; marks rulesets maintained elsewhere, such as a vendored rule set |
 
 Give each ruleset a unique name so `execute` can refer to it unambiguously; `description` and `version` are optional metadata.
@@ -92,7 +92,7 @@ Change what an executed ruleset does without editing it:
 action_parameters:
   id: detections
   overrides:
-    action: log          # every rule
+    action: log # every rule
     enabled: true
     categories:
       - category: sqli

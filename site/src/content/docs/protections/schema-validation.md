@@ -22,23 +22,31 @@ rulesets:
       - id: unknown-endpoint
         action: block
         expression: 'schema_validation.schema == "petstore" and starts_with(http.request.uri.path, "/api/v1/") and not schema_validation.operation.matched'
-        action_parameters: {response: {status_code: 404}}
+        action_parameters: { response: { status_code: 404 } }
       - id: invalid-parameters
         action: block
         expression: "schema_validation.violated"
-        action_parameters: {response: {status_code: 400, content: "request does not match the API"}}
+        action_parameters:
+          {
+            response:
+              { status_code: 400, content: "request does not match the API" },
+          }
       - id: invalid-body
         phase: request_body
         action: block
         expression: "schema_validation.violated"
-        action_parameters: {response: {status_code: 400, content: "body does not match the API"}}
+        action_parameters:
+          {
+            response:
+              { status_code: 400, content: "body does not match the API" },
+          }
 ```
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `name` | Required | Reported in `schema_validation.schema`; unique |
-| `file` | Required | The document, JSON or YAML by extension |
-| `hosts` | `[]` | Bare hostnames the schema describes, without port. Empty means any host |
+| Setting | Default  | Purpose                                                                 |
+| ------- | -------- | ----------------------------------------------------------------------- |
+| `name`  | Required | Reported in `schema_validation.schema`; unique                          |
+| `file`  | Required | The document, JSON or YAML by extension                                 |
+| `hosts` | `[]`     | Bare hostnames the schema describes, without port. Empty means any host |
 
 The schema whose `hosts` include the request's `Host` (compared without port, case-insensitively) is used, else the first schema without `hosts`. Hosts no schema covers are not checked and leave the fields unset. The document's `servers` set the base path: with `servers: [{url: /v1}]`, operations are matched under `/v1`; server variables use their `default`.
 
@@ -56,32 +64,32 @@ Validation supports OpenAPI 3.0 `nullable`, boolean exclusive bounds, and local 
 
 ## Fields
 
-| Field | Type | Value |
-| --- | --- | --- |
-| `schema_validation.schema` | String | Name of the schema that applies |
-| `schema_validation.operation.matched` | Boolean | An operation matched the method and path |
-| `schema_validation.operation.template` | String | The matched template, such as `/pets/{id}` |
-| `schema_validation.violated` | Boolean | The request does not conform |
-| `schema_validation.{path,query,headers,cookies,body}.violated_parameters` | Array<String> | Parameter names, or JSON pointers into the body, with violations |
-| `schema_validation.query.undeclared_parameters` | Array<String> | Query parameters the operation does not declare |
-| `schema_validation.violation_details.location` | String | `path`, `query`, `header`, `cookie` or `body` of the first violation |
-| `schema_validation.violation_details.error_class` | String | Its category, below |
-| `schema_validation.violation_details.error_detail` | String | What failed: `expected:integer`, `pattern_no_match`, `maximum`, … |
-| `schema_validation.violation_details.target` | String | The parameter name or JSON pointer |
+| Field                                                                     | Type          | Value                                                                |
+| ------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------- |
+| `schema_validation.schema`                                                | String        | Name of the schema that applies                                      |
+| `schema_validation.operation.matched`                                     | Boolean       | An operation matched the method and path                             |
+| `schema_validation.operation.template`                                    | String        | The matched template, such as `/pets/{id}`                           |
+| `schema_validation.violated`                                              | Boolean       | The request does not conform                                         |
+| `schema_validation.{path,query,headers,cookies,body}.violated_parameters` | Array<String> | Parameter names, or JSON pointers into the body, with violations     |
+| `schema_validation.query.undeclared_parameters`                           | Array<String> | Query parameters the operation does not declare                      |
+| `schema_validation.violation_details.location`                            | String        | `path`, `query`, `header`, `cookie` or `body` of the first violation |
+| `schema_validation.violation_details.error_class`                         | String        | Its category, below                                                  |
+| `schema_validation.violation_details.error_detail`                        | String        | What failed: `expected:integer`, `pattern_no_match`, `maximum`, …    |
+| `schema_validation.violation_details.target`                              | String        | The parameter name or JSON pointer                                   |
 
 Parameter results are populated with the headers, followed by `body.violated_parameters` after body inspection. The `violation_details` fields retain the first violation, giving parameter errors precedence over body errors. When no operation matches, `violated` remains `false` and the arrays stay empty, so rejecting unknown endpoints requires a separate rule.
 
-| `error_class` | Meaning |
-| --- | --- |
-| `missing_required` | A required parameter, body or property is absent |
-| `invalid_type` | Wrong JSON type |
-| `constraint_violation` | A schema keyword failed: `enum`, `pattern`, `minimum`, `format`, … |
-| `duplicate_value` | A `uniqueItems` array repeats a value |
-| `invalid_encoding` | Bad percent-encoding, UTF-8 or parameter serialization |
-| `invalid_syntax` | The body is not well-formed JSON or XML |
-| `invalid_media_type` | `Content-Type` missing or malformed |
-| `unsupported_media_type` | `Content-Type` not accepted by the operation |
-| `body_size` | The body exceeded the inspection buffer |
+| `error_class`            | Meaning                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `missing_required`       | A required parameter, body or property is absent                   |
+| `invalid_type`           | Wrong JSON type                                                    |
+| `constraint_violation`   | A schema keyword failed: `enum`, `pattern`, `minimum`, `format`, … |
+| `duplicate_value`        | A `uniqueItems` array repeats a value                              |
+| `invalid_encoding`       | Bad percent-encoding, UTF-8 or parameter serialization             |
+| `invalid_syntax`         | The body is not well-formed JSON or XML                            |
+| `invalid_media_type`     | `Content-Type` missing or malformed                                |
+| `unsupported_media_type` | `Content-Type` not accepted by the operation                       |
+| `body_size`              | The body exceeded the inspection buffer                            |
 
 ```text
 # Only type errors in the query string

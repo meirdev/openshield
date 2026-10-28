@@ -39,22 +39,22 @@ JWT validation, schema validation, and GeoIP populate fields that your rules can
 
 Use the earliest phase with the data your rule needs:
 
-| Phase              | Runs when                         | What becomes visible                               |
-| ------------------ | --------------------------------- | -------------------------------------------------- |
+| Phase              | Runs when                         | What becomes visible                                                                |
+| ------------------ | --------------------------------- | ----------------------------------------------------------------------------------- |
 | `request_headers`  | The request headers arrive        | Client IP, URI, headers, cookies, query arguments, JWT and schema parameter results |
-| `request_body`     | Body inspection finishes          | Raw body, form fields, multipart parts, schema body results |
-| `response_headers` | The upstream's headers arrive     | Response status and headers                        |
-| `response_body`    | Response body inspection finishes | Response body                                      |
-| `logging`          | The request is complete           | Everything collected during the request            |
+| `request_body`     | Body inspection finishes          | Raw body, form fields, multipart parts, schema body results                         |
+| `response_headers` | The upstream's headers arrive     | Response status and headers                                                         |
+| `response_body`    | Response body inspection finishes | Response body                                                                       |
+| `logging`          | The request is complete           | Everything collected during the request                                             |
 
 The phase also determines what a rule can do. Request phases can block or allow traffic, with challenges available in `request_headers`; response-body rules can replace a body after its headers have been sent. See [Phases](../../rules/phases/) for ordering and enforcement limits.
 
 ## Where it runs
 
-| Host | What you get |
-| --- | --- |
+| Host                                                 | What you get                                                                                                |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | [The `openshield` proxy](../../hosts/pingora-proxy/) | A standalone reverse proxy on Pingora: TLS, keep-alive pools, graceful process reloads, Prometheus metrics. |
-| [The nginx module](../../hosts/nginx-module/) | The same WAF inside nginx, switched on per location, with shared-memory rate limits across workers. |
-| [The library](../../hosts/library/) | `openshield-core`, the engine itself, for embedding in another Rust server. |
+| [The nginx module](../../hosts/nginx-module/)        | The same WAF inside nginx, switched on per location, with shared-memory rate limits across workers.         |
+| [The library](../../hosts/library/)                  | `openshield-core`, the engine itself, for embedding in another Rust server.                                 |
 
 The WAF settings are shared across all three hosts, while each host supplies its own listener, TLS, upstream, and access-log configuration.

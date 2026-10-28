@@ -8,26 +8,26 @@ sidebar:
 The **access log** records the HTTP outcome for each request and belongs to the host. The **audit log** records requests with at least one logging-enabled rule match and is written by the WAF, with the same format under the proxy and nginx.
 
 ```yaml
-logging:            # the proxy's
-  level: info       # process log level; RUST_LOG overrides it
-  format: json      # json or text
+logging: # the proxy's
+  level: info # process log level; RUST_LOG overrides it
+  format: json # json or text
   access_log: /dev/stdout
-audit_log:          # the WAF's
+audit_log: # the WAF's
   path: /dev/stderr
-  format: json      # json or text
+  format: json # json or text
 log_payloads: false
 detection_only: false
 ```
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `logging.level` | `info` | Level of the process log: `debug`, `info`, `warn`, `error`. `debug` explains why tokens and schemas reject requests |
-| `logging.format` | `json` | Access log format |
-| `logging.access_log` | `/dev/stdout` | `/dev/stdout`, `/dev/stderr` or a file that is appended to |
-| `audit_log.path` | `/dev/stderr` | Same choices. Several processes may share one file: each record is written under a file lock |
-| `audit_log.format` | `json` | Audit log format |
-| `log_payloads` | `false` | Add `waf_payloads` with the field values referenced by logging-enabled matching rules |
-| `detection_only` | `false` | Record rule decisions without enforcing their block or challenge outcomes |
+| Setting              | Default       | Description                                                                                                         |
+| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `logging.level`      | `info`        | Level of the process log: `debug`, `info`, `warn`, `error`. `debug` explains why tokens and schemas reject requests |
+| `logging.format`     | `json`        | Access log format                                                                                                   |
+| `logging.access_log` | `/dev/stdout` | `/dev/stdout`, `/dev/stderr` or a file that is appended to                                                          |
+| `audit_log.path`     | `/dev/stderr` | Same choices. Several processes may share one file: each record is written under a file lock                        |
+| `audit_log.format`   | `json`        | Audit log format                                                                                                    |
+| `log_payloads`       | `false`       | Add `waf_payloads` with the field values referenced by logging-enabled matching rules                               |
+| `detection_only`     | `false`       | Record rule decisions without enforcing their block or challenge outcomes                                           |
 
 What the records contain, and the text formats, are described under [Logs](../../operations/logs/).
 

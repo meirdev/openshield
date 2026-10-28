@@ -7,16 +7,16 @@ sidebar:
 
 These keys configure the `openshield` binary. The [nginx module](../../hosts/nginx-module/) does not read them; nginx's own directives play their role.
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `listen` | Required | Address to accept requests on, such as `0.0.0.0:443` |
-| `upstream` | Required | The application: `http://` or `https://`, host and optional port, no path |
-| `tls` | Omitted | Serve HTTPS with `cert` and `key` files; see below |
-| `workers` | CPU count | Worker threads |
-| `upstream_keepalive_pool` | Pingora default | Size of the pool of idle connections to the upstream |
-| `pid_file` | `/tmp/openshield.pid` | Where the process ID is written |
-| `upgrade_sock` | `/tmp/openshield_upgrade.sock` | Unix socket used to hand listening sockets to a replacement process on [reload](../../operations/running/#reload) |
-| `metrics` | Omitted | Expose Prometheus metrics; see below |
+| Setting                   | Default                        | Description                                                                                                       |
+| ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `listen`                  | Required                       | Address to accept requests on, such as `0.0.0.0:443`                                                              |
+| `upstream`                | Required                       | The application: `http://` or `https://`, host and optional port, no path                                         |
+| `tls`                     | Omitted                        | Serve HTTPS with `cert` and `key` files; see below                                                                |
+| `workers`                 | CPU count                      | Worker threads                                                                                                    |
+| `upstream_keepalive_pool` | Pingora default                | Size of the pool of idle connections to the upstream                                                              |
+| `pid_file`                | `/tmp/openshield.pid`          | Where the process ID is written                                                                                   |
+| `upgrade_sock`            | `/tmp/openshield_upgrade.sock` | Unix socket used to hand listening sockets to a replacement process on [reload](../../operations/running/#reload) |
+| `metrics`                 | Omitted                        | Expose Prometheus metrics; see below                                                                              |
 
 ## TLS
 

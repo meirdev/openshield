@@ -13,16 +13,16 @@ geoip:
   asn_mmdb: ./GeoLite2-ASN.mmdb
 ```
 
-| Field | Example |
-| --- | --- |
-| `ip.src.country` | `"DE"` |
-| `ip.src.continent` | `"EU"` |
-| `ip.src.is_in_european_union` | `true` |
-| `ip.src.region`, `ip.src.region_code` | `"Bavaria"`, `"BY"` |
+| Field                                                    | Example                  |
+| -------------------------------------------------------- | ------------------------ |
+| `ip.src.country`                                         | `"DE"`                   |
+| `ip.src.continent`                                       | `"EU"`                   |
+| `ip.src.is_in_european_union`                            | `true`                   |
+| `ip.src.region`, `ip.src.region_code`                    | `"Bavaria"`, `"BY"`      |
 | `ip.src.city`, `ip.src.postal_code`, `ip.src.metro_code` | `"Munich"`, `"80331"`, … |
-| `ip.src.lat`, `ip.src.lon` | `"48.1374"`, `"11.5755"` |
-| `ip.src.timezone.name` | `"Europe/Berlin"` |
-| `ip.src.asnum` | `3320` |
+| `ip.src.lat`, `ip.src.lon`                               | `"48.1374"`, `"11.5755"` |
+| `ip.src.timezone.name`                                   | `"Europe/Berlin"`        |
+| `ip.src.asnum`                                           | `3320`                   |
 
 ```text
 ip.src.country in {"CN" "RU"} and http.request.uri.path contains "/admin"

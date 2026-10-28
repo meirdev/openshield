@@ -76,7 +76,7 @@ The blocked response has an empty body. Its audit record on stderr includes:
 ```json
 {
   "waf_action": "block",
-  "waf_matched_rules": [{"id": "block-sqli", "action": "block"}]
+  "waf_matched_rules": [{ "id": "block-sqli", "action": "block" }]
 }
 ```
 
@@ -87,14 +87,14 @@ Both requests appear in the access log; only the matching request produces an au
 Replace the rule under `rules:` with this version:
 
 ```yaml
-      - id: block-sqli
-        action: block
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
-        action_parameters:
-          response:
-            status_code: 400
-            content_type: application/json
-            content: '{"error": "request rejected"}'
+- id: block-sqli
+  action: block
+  expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+  action_parameters:
+    response:
+      status_code: 400
+      content_type: application/json
+      content: '{"error": "request rejected"}'
 ```
 
 After validating the file and restarting the proxy, repeat the injection request. It should now return `400` with your JSON body.

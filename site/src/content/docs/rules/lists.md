@@ -26,10 +26,10 @@ http.user_agent in $blocked_ua
 http.user_agent in $scanner_ua
 ```
 
-| `kind` | Matches when |
-| --- | --- |
-| `ip` | The address equals an item or lies inside one of the CIDRs |
-| `string` | The whole value equals an item, case-sensitively |
+| `kind`      | Matches when                                                    |
+| ----------- | --------------------------------------------------------------- |
+| `ip`        | The address equals an item or lies inside one of the CIDRs      |
+| `string`    | The whole value equals an item, case-sensitively                |
 | `substring` | Any item occurs anywhere in the value, ASCII case-insensitively |
 
 Names are unique and `kind` is required; a misspelled kind is a configuration error. Lists are compiled at startup and shared across requests. Substring lists use an Aho-Corasick matcher rather than checking each item separately, but matching still has a cost, and larger lists require more memory and startup work.

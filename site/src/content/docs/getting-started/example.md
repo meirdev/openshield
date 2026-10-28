@@ -7,12 +7,12 @@ sidebar:
 
 The repository's [`examples/`](https://github.com/meirdev/openshield/tree/main/examples) directory pairs an echo application with the WAF configuration used by the proxy's end-to-end test. It lets you try lists, scores, injection detection, rate limiting, JWTs, and schema validation without supplying GeoIP databases or Turnstile credentials, which are not included.
 
-| File | Purpose |
-| --- | --- |
-| `config.yaml` | Lists, scored injection detection, a rate limit, JWT validation, an OpenAPI schema, text logs |
-| `openapi/petstore.yaml` | The schema requests under `/api/v1` are checked against |
-| `upstream.py` | The protected application: echoes each request as JSON |
-| `token.py` | Mints a JWT the configuration accepts |
+| File                    | Purpose                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `config.yaml`           | Lists, scored injection detection, a rate limit, JWT validation, an OpenAPI schema, text logs |
+| `openapi/petstore.yaml` | The schema requests under `/api/v1` are checked against                                       |
+| `upstream.py`           | The protected application: echoes each request as JSON                                        |
+| `token.py`              | Mints a JWT the configuration accepts                                                         |
 
 ## Run it
 
@@ -36,20 +36,20 @@ The application listens on port 3000, and OpenShield forwards to it from port 80
 
 ## What each request does
 
-| Request | Result | Why |
-| --- | --- | --- |
-| `GET /` | `200` | Forwarded; the application echoes it |
-| `GET /search?q=1' OR '1'='1` | `403` | SQL injection scored in `request_headers`, blocked in `request_body` |
-| `GET /search?q=<script>alert(1)</script>` | `403` | XSS, the same way |
-| `GET /` with `User-Agent: sqlmap/1.7` | `403` | Substring list of scanner user agents |
-| 6 × `POST /login` within a minute | `429` on the sixth | Rate limit of five per minute per client IP, then a minute of mitigation |
-| `GET /api/private/profile` | `401` | No JWT; `is_jwt_valid("api")` is false |
-| … with `Authorization: Bearer $(python3 token.py)` | `200` | Valid HS256 token |
-| `GET /api/v1/pets?limit=10` | `200` | Matches the schema |
-| `GET /api/v1/pets?limit=500` | `400` | `limit` above its maximum |
-| `GET /api/v1/owners` | `404` | No such operation in the schema |
-| `POST /api/v1/pets` with `{"name":"Rex"}` | `200` | Body matches the schema |
-| `POST /api/v1/pets` with `{"species":"dragon"}` | `400` | Required property missing, enum violated |
+| Request                                            | Result             | Why                                                                      |
+| -------------------------------------------------- | ------------------ | ------------------------------------------------------------------------ |
+| `GET /`                                            | `200`              | Forwarded; the application echoes it                                     |
+| `GET /search?q=1' OR '1'='1`                       | `403`              | SQL injection scored in `request_headers`, blocked in `request_body`     |
+| `GET /search?q=<script>alert(1)</script>`          | `403`              | XSS, the same way                                                        |
+| `GET /` with `User-Agent: sqlmap/1.7`              | `403`              | Substring list of scanner user agents                                    |
+| 6 × `POST /login` within a minute                  | `429` on the sixth | Rate limit of five per minute per client IP, then a minute of mitigation |
+| `GET /api/private/profile`                         | `401`              | No JWT; `is_jwt_valid("api")` is false                                   |
+| … with `Authorization: Bearer $(python3 token.py)` | `200`              | Valid HS256 token                                                        |
+| `GET /api/v1/pets?limit=10`                        | `200`              | Matches the schema                                                       |
+| `GET /api/v1/pets?limit=500`                       | `400`              | `limit` above its maximum                                                |
+| `GET /api/v1/owners`                               | `404`              | No such operation in the schema                                          |
+| `POST /api/v1/pets` with `{"name":"Rex"}`          | `200`              | Body matches the schema                                                  |
+| `POST /api/v1/pets` with `{"species":"dragon"}`    | `400`              | Required property missing, enum violated                                 |
 
 The commands are in the example's `README.md`, ready to paste.
 

@@ -40,12 +40,12 @@ The YAML holds the [WAF keys](../../configuration/overview/) only, not the proxy
 
 ## Directives
 
-| Directive | Context | Description |
-| --- | --- | --- |
-| `openshield_config` *path* | `http` | The WAF configuration file. Relative paths resolve from nginx's prefix. Errors fail `nginx -t` |
-| `openshield on` \| `off` | `http`, `server`, `location` | Inspect requests here; inherited by nested blocks, off by default |
-| `openshield_turnstile_location` *uri* | `http` | Internal location proxying Turnstile verification to Cloudflare; default `/_openshield/turnstile` |
-| `openshield_ratelimit_zone` *size* | `http` | Shared memory for rate-limit counters, default `10m`; a counter takes under 100 bytes |
+| Directive                             | Context                      | Description                                                                                       |
+| ------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `openshield_config` _path_            | `http`                       | The WAF configuration file. Relative paths resolve from nginx's prefix. Errors fail `nginx -t`    |
+| `openshield on` \| `off`              | `http`, `server`, `location` | Inspect requests here; inherited by nested blocks, off by default                                 |
+| `openshield_turnstile_location` _uri_ | `http`                       | Internal location proxying Turnstile verification to Cloudflare; default `/_openshield/turnstile` |
+| `openshield_ratelimit_zone` _size_    | `http`                       | Shared memory for rate-limit counters, default `10m`; a counter takes under 100 bytes             |
 
 Validate changes with `nginx -t` before applying them with `nginx -s reload`. The reload rebuilds the WAF while preserving shared rate-limit counters if the zone size is unchanged. When the zone fills, it evicts counters that have been idle for two periods and have no active mitigation; if none qualify, the request passes and a warning is logged.
 
@@ -53,21 +53,21 @@ Validate changes with `nginx -t` before applying them with `nginx -s reload`. Th
 
 After inspection, these variables expose the result to `log_format`. Locations with `openshield off` leave them unset, so nginx logs them as `-`.
 
-| Variable | Value |
-| --- | --- |
-| `$openshield_action` | `pass`, `allow`, `block` or `challenge` |
-| `$openshield_rules` | IDs of the rules that matched with logging enabled, comma-separated |
-| `$openshield_request_id` | The ID of the audit record |
+| Variable                 | Value                                                               |
+| ------------------------ | ------------------------------------------------------------------- |
+| `$openshield_action`     | `pass`, `allow`, `block` or `challenge`                             |
+| `$openshield_rules`      | IDs of the rules that matched with logging enabled, comma-separated |
+| `$openshield_request_id` | The ID of the audit record                                          |
 
 ## What runs where
 
-| OpenShield phase | nginx phase | Notes |
-| --- | --- | --- |
-| `request_headers` | access | Blocks are answered with the rule's status, content type and body; challenge pages are served |
-| `request_body` | access | With `request_body` rules, the body is read before proxying and inspected |
-| `response_headers` | header filter | Side effects only: scores and logging |
-| `response_body` | body filter | With `inspect_response_body: true`; a block replaces the rest of the body |
-| `logging` | log | Before nginx writes the access log, so the variables are filled |
+| OpenShield phase   | nginx phase   | Notes                                                                                         |
+| ------------------ | ------------- | --------------------------------------------------------------------------------------------- |
+| `request_headers`  | access        | Blocks are answered with the rule's status, content type and body; challenge pages are served |
+| `request_body`     | access        | With `request_body` rules, the body is read before proxying and inspected                     |
+| `response_headers` | header filter | Side effects only: scores and logging                                                         |
+| `response_body`    | body filter   | With `inspect_response_body: true`; a block replaces the rest of the body                     |
+| `logging`          | log           | Before nginx writes the access log, so the variables are filled                               |
 
 Only the main request is inspected; subrequests and `error_page` redirects reuse its verdict. The filters sit at the top of nginx's chains and see the upstream response before `gzip` and the other output filters. While a response body is inspected its buffers are copied once; with `inspect_response_body` off responses are untouched. With `response_body` rules, `Content-Length` is dropped from inspected responses so nginx can re-frame a body that was held or replaced.
 

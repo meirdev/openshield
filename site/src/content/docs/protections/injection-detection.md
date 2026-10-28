@@ -17,12 +17,12 @@ detect_sqli(lookup_json_string(http.request.body.raw, "query"))
 
 Attackers encode payloads so a naive filter does not see them. Apply the transforms the application will apply, innermost first:
 
-| Transform | Undoes |
-| --- | --- |
-| `url_decode_uni` | Percent-encoding, including `%uXXXX` |
-| `html_entity_decode` | `&lt;`, `&#x3c;` and friends |
-| `base64_decode`, `hex_decode` | Encoded parameters |
-| `lower` | Case variations |
+| Transform                                                                      | Undoes                                                         |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `url_decode_uni`                                                               | Percent-encoding, including `%uXXXX`                           |
+| `html_entity_decode`                                                           | `&lt;`, `&#x3c;` and friends                                   |
+| `base64_decode`, `hex_decode`                                                  | Encoded parameters                                             |
+| `lower`                                                                        | Case variations                                                |
 | `compress_whitespace`, `remove_whitespace`, `replace_comments`, `remove_nulls` | Padding, `/**/` comments and null bytes used to split keywords |
 
 ```text
@@ -33,14 +33,14 @@ Query arguments and form fields are already decoded once when they are parsed in
 
 ## Where to look
 
-| Source | Field |
-| --- | --- |
-| Query arguments | `http.request.uri.args.values[*]`, or the raw `http.request.uri.query` |
-| Form fields | `http.request.body.form.values[*]` (`request_body` phase) |
-| Multipart fields | `http.request.body.multipart.values[*]` |
-| JSON bodies | `lookup_json_string(http.request.body.raw, "key", …)` for known keys, or `http.request.body.raw` as a whole |
-| Cookies and headers | `http.request.cookies.values[*]`, `http.request.headers.values[*]` |
-| Path | `http.request.uri.path` |
+| Source              | Field                                                                                                       |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Query arguments     | `http.request.uri.args.values[*]`, or the raw `http.request.uri.query`                                      |
+| Form fields         | `http.request.body.form.values[*]` (`request_body` phase)                                                   |
+| Multipart fields    | `http.request.body.multipart.values[*]`                                                                     |
+| JSON bodies         | `lookup_json_string(http.request.body.raw, "key", …)` for known keys, or `http.request.body.raw` as a whole |
+| Cookies and headers | `http.request.cookies.values[*]`, `http.request.headers.values[*]`                                          |
+| Path                | `http.request.uri.path`                                                                                     |
 
 ## Score, then decide
 
@@ -55,11 +55,11 @@ rulesets:
       - id: sqli-args
         action: score
         expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
-        action_parameters: {scores: [{name: sqli, increment: 10}]}
+        action_parameters: { scores: [{ name: sqli, increment: 10 }] }
       - id: sqli-ua
         action: score
         expression: "detect_sqli(http.user_agent)"
-        action_parameters: {scores: [{name: sqli, increment: 3}]}
+        action_parameters: { scores: [{ name: sqli, increment: 3 }] }
       - id: block-sqli
         phase: request_body
         action: block

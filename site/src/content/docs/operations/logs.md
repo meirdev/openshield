@@ -12,7 +12,22 @@ The two logs share a `request_id`, so an audit record can be traced to its acces
 The host writes an access-log entry after each response, recording the request, HTTP outcome, and WAF decision:
 
 ```json
-{"request_id":"1ae4c898-…","timestamp":"2026-10-25T09:44:33.326Z","client_ip":"127.0.0.1","method":"GET","protocol":"HTTP/1.1","host":"127.0.0.1:8080","path":"/search","query":"q=1'%20OR%20'1'='1","status":403,"duration_ms":0.412,"bytes_received":0,"bytes_sent":18,"waf_action":"block","waf_matched_rules":["sqli-args","block-injection"]}
+{
+  "request_id": "1ae4c898-…",
+  "timestamp": "2026-10-25T09:44:33.326Z",
+  "client_ip": "127.0.0.1",
+  "method": "GET",
+  "protocol": "HTTP/1.1",
+  "host": "127.0.0.1:8080",
+  "path": "/search",
+  "query": "q=1'%20OR%20'1'='1",
+  "status": 403,
+  "duration_ms": 0.412,
+  "bytes_received": 0,
+  "bytes_sent": 18,
+  "waf_action": "block",
+  "waf_matched_rules": ["sqli-args", "block-injection"]
+}
 ```
 
 The `waf_action` field records the most recent terminal decision as `pass`, `allow`, `block`, or `challenge`. It can differ from the HTTP outcome—for example, detection-only mode can record `block` alongside an upstream `200`—so read `status` for the response actually sent. The text format shows the same distinction:
@@ -32,16 +47,34 @@ The WAF writes an audit record when at least one logging-enabled rule matches, c
   "request_id": "1ae4c898-…",
   "timestamp": "2026-10-25T09:44:33.326Z",
   "waf_action": "block",
-  "waf_matched_rules": [{"id": "sqli-args", "action": "score"}, {"id": "block-injection", "action": "block"}],
-  "waf_scores": {"sqli": 10},
-  "waf_payloads": {"http.request.uri.args.values": ["1' OR '1'='1"], "score.sqli": 10},
-  "request": {
-    "client_ip": "127.0.0.1", "method": "GET", "protocol": "HTTP/1.1", "host": "127.0.0.1:8080",
-    "path": "/search", "query": "q=1'%20OR%20'1'='1",
-    "headers": [["host", "127.0.0.1:8080"], ["user-agent", "curl/8.18.0"]],
-    "body": null, "body_size": 0
+  "waf_matched_rules": [
+    { "id": "sqli-args", "action": "score" },
+    { "id": "block-injection", "action": "block" }
+  ],
+  "waf_scores": { "sqli": 10 },
+  "waf_payloads": {
+    "http.request.uri.args.values": ["1' OR '1'='1"],
+    "score.sqli": 10
   },
-  "response": {"status": 403, "headers": [["content-type", "text/plain"]], "body_size": 18}
+  "request": {
+    "client_ip": "127.0.0.1",
+    "method": "GET",
+    "protocol": "HTTP/1.1",
+    "host": "127.0.0.1:8080",
+    "path": "/search",
+    "query": "q=1'%20OR%20'1'='1",
+    "headers": [
+      ["host", "127.0.0.1:8080"],
+      ["user-agent", "curl/8.18.0"]
+    ],
+    "body": null,
+    "body_size": 0
+  },
+  "response": {
+    "status": 403,
+    "headers": [["content-type", "text/plain"]],
+    "body_size": 18
+  }
 }
 ```
 

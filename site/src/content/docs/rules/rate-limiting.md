@@ -17,15 +17,15 @@ Add `ratelimit` to a rule to count matching requests per key. The rule acts only
     requests_per_period: 5
     mitigation_timeout: 300
   action_parameters:
-    response: {status_code: 429, content: "too many attempts"}
+    response: { status_code: 429, content: "too many attempts" }
 ```
 
-| Parameter | Meaning |
-| --- | --- |
-| `characteristics` | Fields whose values form the key. Empty or omitted means `ip.src` |
-| `period` | Counting window in seconds |
-| `requests_per_period` | Matches allowed per key within the window |
-| `mitigation_timeout` | Seconds to keep applying the action after the limit is exceeded; `0` re-evaluates every request |
+| Parameter             | Meaning                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| `characteristics`     | Fields whose values form the key. Empty or omitted means `ip.src`                               |
+| `period`              | Counting window in seconds                                                                      |
+| `requests_per_period` | Matches allowed per key within the window                                                       |
+| `mitigation_timeout`  | Seconds to keep applying the action after the limit is exceeded; `0` re-evaluates every request |
 
 In this example, the sixth matching request in a fresh window returns `429` and starts a 300-second mitigation period. Once that period expires, the next matching request is checked against the current count; expiry does not reset it.
 

@@ -46,10 +46,10 @@ Before starting, run `openshield --test -c config.yaml` to validate and initiali
 
 ## Sections
 
-| Section | Keys |
-| --- | --- |
-| [Proxy](../proxy/) | `listen`, `upstream`, `tls`, `workers`, `upstream_keepalive_pool`, `pid_file`, `upgrade_sock`, `metrics` |
-| [Body inspection](../body-inspection/) | `max_request_body_buffer`, `request_body_limit_action`, `inspect_response_body`, `max_response_body_buffer`, `response_body_limit_action` |
-| [Logging](../logging/) | `logging`, `audit_log`, `log_payloads`, `detection_only` |
-| [Rules](../../rules/rulesets/) | `rulesets`, `lists`, `scores` |
-| [Protections](../../protections/injection-detection/) | `geoip`, `challenge`, `token_configurations`, `schemas` |
+| Section                                               | Keys                                                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [Proxy](../proxy/)                                    | `listen`, `upstream`, `tls`, `workers`, `upstream_keepalive_pool`, `pid_file`, `upgrade_sock`, `metrics`                                  |
+| [Body inspection](../body-inspection/)                | `max_request_body_buffer`, `request_body_limit_action`, `inspect_response_body`, `max_response_body_buffer`, `response_body_limit_action` |
+| [Logging](../logging/)                                | `logging`, `audit_log`, `log_payloads`, `detection_only`                                                                                  |
+| [Rules](../../rules/rulesets/)                        | `rulesets`, `lists`, `scores`                                                                                                             |
+| [Protections](../../protections/injection-detection/) | `geoip`, `challenge`, `token_configurations`, `schemas`                                                                                   |

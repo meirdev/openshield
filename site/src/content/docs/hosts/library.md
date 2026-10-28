@@ -38,13 +38,13 @@ Complete body processing by sending a final chunk with `end_of_stream: true`, ev
 
 The core handles policy evaluation, while the host translates its verdicts into network behavior:
 
-| The core | The host |
-| --- | --- |
-| Parsing and validating the configuration, compiling rules | Listening, TLS, connecting to the upstream |
-| Populating fields from plain request data | Turning its own request type into `RequestData` |
-| Evaluating phases, scores, rate limits, verdicts | Sending block and challenge responses, holding or releasing bodies |
-| JWT and schema validation | The HTTP call that verifies a Turnstile token (`ChallengeManager::turnstile_request` builds it) |
-| Writing the audit log | Writing the access log from `TransactionSummary` |
-| Counting rate limits in memory | A shared store, by implementing `RateLimitStore`, where workers are processes |
+| The core                                                  | The host                                                                                        |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Parsing and validating the configuration, compiling rules | Listening, TLS, connecting to the upstream                                                      |
+| Populating fields from plain request data                 | Turning its own request type into `RequestData`                                                 |
+| Evaluating phases, scores, rate limits, verdicts          | Sending block and challenge responses, holding or releasing bodies                              |
+| JWT and schema validation                                 | The HTTP call that verifies a Turnstile token (`ChallengeManager::turnstile_request` builds it) |
+| Writing the audit log                                     | Writing the access log from `TransactionSummary`                                                |
+| Counting rate limits in memory                            | A shared store, by implementing `RateLimitStore`, where workers are processes                   |
 
 The core has no dependency on an async runtime or on networking, which is what lets it run inside nginx workers. The OpenAPI validator is a further crate, `openshield-openapi`, usable on its own.

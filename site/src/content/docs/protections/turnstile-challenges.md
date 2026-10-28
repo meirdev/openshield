@@ -22,15 +22,15 @@ rulesets:
         expression: 'starts_with(http.request.uri.path, "/admin/")'
 ```
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `turnstile_site_key` | Required | Public key the widget uses |
-| `turnstile_secret_key` | Required | Secret for verifying tokens with Cloudflare |
-| `cookie_secret` | Required | Signs the verification cookie |
-| `cookie_ttl` | `3600` | Cookie lifetime in seconds |
-| `cookie_name` | `oss_challenge` | Cookie name |
-| `challenge_path` | `/__openshield/challenge` | Where the page posts the Turnstile token |
-| `custom_page` | Omitted | Your own HTML page |
+| Setting                | Default                   | Purpose                                     |
+| ---------------------- | ------------------------- | ------------------------------------------- |
+| `turnstile_site_key`   | Required                  | Public key the widget uses                  |
+| `turnstile_secret_key` | Required                  | Secret for verifying tokens with Cloudflare |
+| `cookie_secret`        | Required                  | Signs the verification cookie               |
+| `cookie_ttl`           | `3600`                    | Cookie lifetime in seconds                  |
+| `cookie_name`          | `oss_challenge`           | Cookie name                                 |
+| `challenge_path`       | `/__openshield/challenge` | Where the page posts the Turnstile token    |
+| `custom_page`          | Omitted                   | Your own HTML page                          |
 
 Challenges are enforced only in `request_headers`. In later phases, a matching challenge still ends that phase's rule evaluation, but no challenge page is served.
 
@@ -49,9 +49,9 @@ In the proxy, the call to Cloudflare has a five-second timeout and a failure cou
 
 `custom_page` names an HTML file in which two placeholders are replaced when it is loaded:
 
-| Placeholder | Replaced with |
-| --- | --- |
-| `{{turnstile_site_key}}` | The site key |
-| `{{challenge_path}}` | The verification endpoint |
+| Placeholder              | Replaced with             |
+| ------------------------ | ------------------------- |
+| `{{turnstile_site_key}}` | The site key              |
+| `{{challenge_path}}`     | The verification endpoint |
 
 Include the Turnstile widget and a form posting to `{{challenge_path}}` with the widget's `cf-turnstile-response` field and a hidden `redirect` field holding the original URL, set from JavaScript as the default page does.

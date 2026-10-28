@@ -7,14 +7,14 @@ sidebar:
 
 A rule's action determines what happens when its expression matches. The available actions are:
 
-| Action | Effect |
-| --- | --- |
-| `block` | Stop the request and send a response; `403` with an empty body by default |
-| `allow` | Skip the remaining rules of the current phase |
-| `log` | Record the match in the audit log and continue |
-| `score` | Add to [scores](../scores/) and continue |
+| Action      | Effect                                                                                        |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `block`     | Stop the request and send a response; `403` with an empty body by default                     |
+| `allow`     | Skip the remaining rules of the current phase                                                 |
+| `log`       | Record the match in the audit log and continue                                                |
+| `score`     | Add to [scores](../scores/) and continue                                                      |
 | `challenge` | Require a [Turnstile verification](../../protections/turnstile-challenges/) before forwarding |
-| `execute` | Run a custom or managed [ruleset](../rulesets/#executing-a-ruleset) |
+| `execute`   | Run a custom or managed [ruleset](../rulesets/#executing-a-ruleset)                           |
 
 When `block`, `allow`, or `challenge` matches, evaluation of the current phase ends. The `log` and `score` actions let it continue. This ordering also applies in detection-only mode, while the action's effect depends on the [phase](../phases/). Place the examples below under a root ruleset's `rules:`.
 
@@ -58,7 +58,7 @@ Each `name` must be declared in the top-level `scores` list. `increment` default
 - id: run-detections
   action: execute
   expression: "true"
-  action_parameters: {id: detections}
+  action_parameters: { id: detections }
 ```
 
 ## Logging

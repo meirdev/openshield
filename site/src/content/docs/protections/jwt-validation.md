@@ -30,15 +30,15 @@ rulesets:
         action: block
         expression: 'starts_with(http.request.uri.path, "/api/") and not is_jwt_valid("api")'
         action_parameters:
-          response: {status_code: 401, content: "invalid or missing token"}
+          response: { status_code: 401, content: "invalid or missing token" }
 ```
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `id` | Required | How rules refer to this configuration; unique |
-| `description` | Omitted | Free text |
-| `token_sources` | Required | Expressions that locate the token |
-| `credentials.keys` | Required | JSON Web Keys that may have signed it |
+| Setting            | Default  | Purpose                                       |
+| ------------------ | -------- | --------------------------------------------- |
+| `id`               | Required | How rules refer to this configuration; unique |
+| `description`      | Omitted  | Free text                                     |
+| `token_sources`    | Required | Expressions that locate the token             |
+| `credentials.keys` | Required | JSON Web Keys that may have signed it         |
 
 ## Token sources
 
@@ -50,11 +50,11 @@ Sources are tried in order; the first valid token wins. An invalid earlier sourc
 
 Each key declares a `kid` and `alg`, and a token must match both header values to use that key. This prevents the token from selecting a different algorithm for it.
 
-| `kty` | `alg` | Requirements |
-| --- | --- | --- |
-| `RSA` | `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512` | Modulus of at least 2048 bits; public key only (`n`, `e`) |
-| `EC` | `ES256`, `ES384` | `crv` is `P-256` for `ES256`, `P-384` for `ES384`; public key only (`x`, `y`) |
-| `oct` | `HS256`, `HS384`, `HS512` | `k` is the shared secret, unpadded base64url, at least 32, 48 or 64 bytes |
+| `kty` | `alg`                                                | Requirements                                                                  |
+| ----- | ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `RSA` | `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512` | Modulus of at least 2048 bits; public key only (`n`, `e`)                     |
+| `EC`  | `ES256`, `ES384`                                     | `crv` is `P-256` for `ES256`, `P-384` for `ES384`; public key only (`x`, `y`) |
+| `oct` | `HS256`, `HS384`, `HS512`                            | `k` is the shared secret, unpadded base64url, at least 32, 48 or 64 bytes     |
 
 Keys are loaded from the configuration rather than fetched from a JWKS endpoint. To rotate one, add its replacement alongside it, [reload](../../operations/running/#reload), and remove the old key once its tokens have expired. Quote any `kid` that YAML would interpret as a number, and run `--test` to catch weak or inconsistent keys before reloading.
 
@@ -68,10 +68,10 @@ Keys are loaded from the configuration rather than fetched from a JWKS endpoint.
 
 ## Functions
 
-| Function | True when |
-| --- | --- |
-| `is_jwt_valid("id")` | The request carries a valid token for configuration `id` |
-| `is_jwt_present("id")` | Any token source has a non-empty value, valid or not |
+| Function               | True when                                                |
+| ---------------------- | -------------------------------------------------------- |
+| `is_jwt_valid("id")`   | The request carries a valid token for configuration `id` |
+| `is_jwt_present("id")` | Any token source has a non-empty value, valid or not     |
 
 The argument is a literal; an unknown `id` fails configuration validation.
 
@@ -87,13 +87,13 @@ not (is_jwt_valid("api") or is_jwt_valid("partner"))
 
 The registered claims of a valid token are fields, each a map keyed by configuration `id` with an array of values:
 
-| Field | Type | Claim |
-| --- | --- | --- |
-| `http.request.jwt.claims.iss` | `Map<Array<String>>` | Issuer |
-| `http.request.jwt.claims.sub` | `Map<Array<String>>` | Subject |
-| `http.request.jwt.claims.aud` | `Map<Array<String>>` | Audience, one or more values |
-| `http.request.jwt.claims.jti` | `Map<Array<String>>` | Token ID |
-| `http.request.jwt.claims.iat.sec` | `Map<Array<Integer>>` | Issued at, seconds since the epoch |
+| Field                             | Type                  | Claim                               |
+| --------------------------------- | --------------------- | ----------------------------------- |
+| `http.request.jwt.claims.iss`     | `Map<Array<String>>`  | Issuer                              |
+| `http.request.jwt.claims.sub`     | `Map<Array<String>>`  | Subject                             |
+| `http.request.jwt.claims.aud`     | `Map<Array<String>>`  | Audience, one or more values        |
+| `http.request.jwt.claims.jti`     | `Map<Array<String>>`  | Token ID                            |
+| `http.request.jwt.claims.iat.sec` | `Map<Array<Integer>>` | Issued at, seconds since the epoch  |
 | `http.request.jwt.claims.nbf.sec` | `Map<Array<Integer>>` | Not before, seconds since the epoch |
 
 Each claim field has companion `.names` and `.values` fields containing its configuration IDs and combined values. Because only valid tokens populate claims, wrapping a positive match in `not` rejects both missing and unexpected claims:

@@ -7,13 +7,13 @@ sidebar:
 
 A rule's `phase` selects the data and point in the lifecycle at which it runs. The default is `request_headers`. Within each phase, rules run in configuration order, with executed rulesets expanded in place.
 
-| Phase | Runs when | Available | Can |
-| --- | --- | --- | --- |
-| `request_headers` | The request headers arrive | Client IP and GeoIP, URI, headers, cookies, query arguments, JWT results and claims, schema results for parameters | Block, allow, challenge, log, score |
-| `request_body` | Body inspection finishes | Everything above, plus the raw body, form fields, multipart parts, schema results for the body | Block, allow, log, score |
-| `response_headers` | The upstream's headers arrive | Everything above, plus the response status and headers | Log, score |
-| `response_body` | Response body inspection finishes | Everything above, plus the response body | Replace or suppress the body, log, score |
-| `logging` | The request is complete | Everything collected | Log, score |
+| Phase              | Runs when                         | Available                                                                                                          | Can                                      |
+| ------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `request_headers`  | The request headers arrive        | Client IP and GeoIP, URI, headers, cookies, query arguments, JWT results and claims, schema results for parameters | Block, allow, challenge, log, score      |
+| `request_body`     | Body inspection finishes          | Everything above, plus the raw body, form fields, multipart parts, schema results for the body                     | Block, allow, log, score                 |
+| `response_headers` | The upstream's headers arrive     | Everything above, plus the response status and headers                                                             | Log, score                               |
+| `response_body`    | Response body inspection finishes | Everything above, plus the response body                                                                           | Replace or suppress the body, log, score |
+| `logging`          | The request is complete           | Everything collected                                                                                               | Log, score                               |
 
 A block in a request phase sends the rule's response instead of forwarding the request body. The proxy and nginx hosts do not enforce block verdicts from `response_headers` or `logging`. A `response_body` block changes the remaining body, while the client keeps the upstream's status and headers.
 

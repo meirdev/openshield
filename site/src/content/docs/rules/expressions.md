@@ -13,14 +13,14 @@ http.request.method == "POST" and not ip.src in $office
 
 ## Comparisons
 
-| Operator | Meaning | Example |
-| --- | --- | --- |
-| `==`, `!=` | Equal, not equal | `http.request.method == "POST"` |
-| `<`, `<=`, `>`, `>=` | Numeric order | `http.response.code >= 500` |
-| `contains` | Substring | `http.request.uri.path contains "/admin"` |
-| `matches` or `~` | Regular expression | `http.request.uri.path matches "\\.(php|asp)$"` |
-| `in` | Membership in a set or list | `http.request.method in {"PUT" "DELETE"}`, `ip.src in $office` |
-| `and`, `or`, `not`, `xor` | Boolean logic; parentheses group | `(a or b) and not c` |
+| Operator                  | Meaning                          | Example                                                        |
+| ------------------------- | -------------------------------- | -------------------------------------------------------------- |
+| `==`, `!=`                | Equal, not equal                 | `http.request.method == "POST"`                                |
+| `<`, `<=`, `>`, `>=`      | Numeric order                    | `http.response.code >= 500`                                    |
+| `contains`                | Substring                        | `http.request.uri.path contains "/admin"`                      |
+| `matches` or `~`          | Regular expression               | `http.request.uri.path matches "\\.(php                        | asp)$"` |
+| `in`                      | Membership in a set or list      | `http.request.method in {"PUT" "DELETE"}`, `ip.src in $office` |
+| `and`, `or`, `not`, `xor` | Boolean logic; parentheses group | `(a or b) and not c`                                           |
 
 String literals use double quotes, so wrapping the whole expression in single quotes is convenient in YAML. Integers, IP addresses, and CIDRs do not need quotes, and set items are separated by spaces, as in `ip.src in {10.0.0.0/8 192.168.1.1}`.
 
