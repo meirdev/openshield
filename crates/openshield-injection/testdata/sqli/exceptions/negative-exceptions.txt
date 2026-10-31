@@ -1,0 +1,26 @@
+# Inputs from the negative corpora that detect_sqli is allowed to flag.
+# Each one is a known limitation; the corpus test fails if an entry here
+# stops being one, so the list stays honest. Lines are read like the
+# corpora: trailing whitespace trimmed, then URL-decoded.
+
+# libinjection's own false-positive list; it flags 21 of these, we flag the
+# ones below. Each is either runnable SQL (`select x from y where`), an
+# operator quoted between two strings, which MySQL evaluates, or arithmetic
+# that folds to an attack shape (`80% ACRYLIC AND 20% WOOL`).
+SMALL "&" SIGN
+BILLEEVERSBOUTIQUE , BROWNING "LIKE"
+80%25 ACRYLIC AND 20%25 WOOL
+35%25 COTTON AND 65%25 POLYESTER.
+"IS" STAMP
+"LIKE" STAMP
+/SEARCH/HANDMADE%3FSEARCH_SUBMIT%3D%26Q%3D%22MOD%22%26VIEW_TYPE%3DGALLERY%26SHIP_TO%3DUS%26PAGE%3D14
+/SEARCH%3FSEARCH_SUBMIT%3D%26Q%3D36%22%2BX%2B48%2B%22%2BFRAME%26VIEW_TYPE%3DGALLERY%26SHIP_TO%3DUS
+FAITES+UN+TOUR+SUR+NOTRE+NOUVELLE+%3CBR+%2F%3E%3CA+HREF%3D%22%2FAPPS%2F%22%3EGALERIE+D%27APPLICATIONS%3C%2FA%3E%21
+RENCONTREZ+DES+PERSONNES+AVEC+QUI+VOUS+AVEZ+DES+INTRTS+COMMUNS+ET+COLLABOREZ+AVEC+EUX.+TROUVEZ+DES+TEAMS+LOCAUX++REJOINDRE+SUR+LA+%3CA+HREF%3D%22%2FTEAMS%2F%22%3EPAGE+DES+TEAMS%3C%2FA%3E
+%2FSEARCH%2FHANDMADE%3FSEARCH_SUBMIT%3D%26Q%3D%22LIKE%22%2BSTAMP%26VIEW_TYPE%3DGALLERY%26SHIP_TO%3DUS
+MISTERGLAS.DK%27%2A%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27%27
+"*"
+'countdown calendar" and "disney:
+select 'and'
+select x from y where
+x/*

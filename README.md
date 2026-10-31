@@ -14,7 +14,7 @@ OpenShield is a reverse proxy and Web Application Firewall (WAF) built on [Cloud
 ## Features
 
 - Rules for request and response headers and bodies
-- SQL injection and XSS detection with libinjection
+- SQL injection and XSS detection with OpenShield's own engine, a Rust reimplementation of libinjection's method with fewer false positives
 - GeoIP lookups, IP and string lists, and threat scores
 - Per-key rate limits and Turnstile challenges
 - JWT validation with claims available to rules

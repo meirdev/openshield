@@ -1,0 +1,2 @@
+# Inputs from the negative corpora that detect_xss is allowed to flag. Empty:
+# every benign sample is clean.

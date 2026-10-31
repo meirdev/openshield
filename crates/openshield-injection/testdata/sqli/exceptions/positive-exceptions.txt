@@ -1,0 +1,25 @@
+# Inputs from the positive corpora that detect_sqli is allowed to miss.
+# Each one is a known limitation; the corpus test fails if an entry here
+# stops being one, so the list stays honest. Lines are read like the
+# corpora: trailing whitespace trimmed, then URL-decoded.
+
+# Shapes outside the fingerprint database, missed by libinjection 4.0.1 as
+# well: obfuscation with `1.e`, backslashes and nulls between keywords,
+# bare LIMIT clauses, and filter-test strings that are not runnable SQL.
+19 version() LIMIT 1,1
+1'id=-13 union select 1,2,3,4,5,6,7,8,9,10,11,12,13/*
+-1 union select 1.2.concat(customers_lastname.0x3a.customers_password.0x3a.customers_email_address).4.5.6.7.8 from customers--
+id:-00000043398 union select 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15--
+limit 0,1--
+*/select 1,2,3,4,5 table_name information_schema.columns-- 
+PHPX+AND+1%3D1+AND+XX%3DX
+1;do (1=1)
+%3B+DROP+table+Users+--
+aa%22in%2B+%28%22aa%22%29+or+-1+%21%3D+%220
+1%27%2A%40%40version%2A-0%2520%3D%2520%270
+SELECT $.`` 1.e.table_name
+SELECT{_ .``1.e.table_name}
+SELECT LightOS . ``1.e.table_name LightOS)
+SELECT information_schema 1337.e.tables 13.37e.table_name
+SELECT\UNION SELECT 2
+SELECT%00table_name%00FROM%00all_tab_tables

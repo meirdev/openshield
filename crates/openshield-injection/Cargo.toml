@@ -1,0 +1,20 @@
+[package]
+name = "openshield-injection"
+description = "Injection detection for OpenShield: XSS (and later SQLi) detection over raw bytes"
+version.workspace = true
+edition.workspace = true
+
+[features]
+# Exposes the corpus loader used by the tests and the eval example.
+testdata = []
+
+[dependencies]
+
+[dev-dependencies]
+openshield-injection = { path = ".", features = ["testdata"] }
+libinjectionrs = "0.1"
+criterion.workspace = true
+
+[[bench]]
+name = "detect"
+harness = false

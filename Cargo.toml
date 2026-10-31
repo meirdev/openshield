@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/openshield-openapi",
     "crates/openshield-core",
+    "crates/openshield-injection",
     "crates/openshield-pingora",
     "crates/openshield-nginx",
 ]
@@ -12,6 +13,7 @@ members = [
 default-members = [
     "crates/openshield-openapi",
     "crates/openshield-core",
+    "crates/openshield-injection",
     "crates/openshield-pingora",
 ]
 
@@ -22,6 +24,7 @@ edition = "2024"
 [workspace.dependencies]
 openshield-openapi = { path = "crates/openshield-openapi" }
 openshield-core = { path = "crates/openshield-core" }
+openshield-injection = { path = "crates/openshield-injection" }
 
 wirefilter-engine = { git = "https://github.com/cloudflare/wirefilter.git", branch = "master", package = "wirefilter-engine" }
 serde = { version = "1", features = ["derive"] }
@@ -47,7 +50,6 @@ ip_network_table = "0.2"
 ip_network = "0.4"
 regex = "1"
 aho-corasick = "1"
-libinjectionrs = "0.1"
 chrono = "0.4"
 base64 = "0.22"
 mimalloc = "0.1"
@@ -68,5 +70,6 @@ mime = "0.3"
 roxmltree = "0.20"
 aws-lc-rs = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+criterion = "0.8"
 ngx = { version = "0.5.1", default-features = false, features = ["std"] }
 nginx-sys = "0.5.0"

@@ -1,0 +1,188 @@
+# Ordinary user input with apostrophes, SQL-looking words and punctuation.
+hello world
+O'Brien
+O'Neil and O'Connor
+rock 'n' roll
+don't stop believin'
+it's a 'quoted' word
+I said "hello" and left
+she said 'bye'
+Tom & Jerry
+AT&T
+R&D
+fish and chips
+salt or pepper
+1 or 2 bedrooms
+2 and a half men
+to be or not to be
+yes and no
+black and white
+select the best option
+select all that apply
+please select a country
+order by date
+sort order
+in order to win
+group by category
+the union of two sets
+student union building
+union jack
+delete this message
+drop me a line
+drop-down menu
+drop table manners
+update your profile
+software update available
+insert coin
+insert tab A into slot B
+create an account
+where are you
+where is the library
+from here to there
+from 10am to 5pm
+and then there were none
+or else
+not now
+like this
+I like turtles
+is it true
+null and void
+true love
+1 + 1 = 2
+2 * 3 = 6
+10 / 2
+5 - 3
+100%
+50% off
+$10.00
+$1,000.00
+$5
+1,000,000
+3.14159
+1e10
+2.5e-3
+0x1F
+-1
++1
+1-2-3
+2024-01-15
+15/01/2024
+01-15-2024 10:30:00
+12:30:45
++1-555-0100
+(555) 010-0100
+555-0100
+user@example.com
+first.last@example.com
+https://example.com/path?a=1&b=2
+http://example.com/search?q=hello+world
+example.com
+www.example.com/index.html
+/usr/local/bin
+C:\Users\Alice\file.txt
+file.tar.gz
+version 1.2.3
+v2.0.1-beta
+#hashtag
+#1 fan
+#1
+item #42
+#FF0000
+rgb(255, 0, 0)
+f(x) = 2x + 1
+count me in
+sum of all fears
+avg joe
+abc123
+ABC-123
+A1B2C3
+SKU-00123
+ORD/2024/0001
+INV#12345
+ref: 12345
+id=42
+page=2&limit=10
+name=John+Doe
+key: value
+{"id": 1, "name": "Alice"}
+[1, 2, 3]
+["a", "b"]
+foo; bar
+a; b; c
+semi; colon
+one -- two
+dash -- separated -- words
+well -- that was fun
+-- comment
+--
+---
+----
+...
+.
+..
+?
+??
+!
+!!
+~
+`code`
+`` `
+`backtick`
+"double quoted"
+'single quoted'
+''
+""
+'
+"
+it's 5 o'clock
+'twas the night
+'90s music
+rock'n'roll
+y'all
+ma'am
+Hawai'i
+Côte d'Ivoire
+L'Oréal
+D'Angelo
+McDonald's
+Levi's
+Macy's
+the '80s and '90s
+she's here
+we're done
+they'll come
+I'd like that
+wouldn't it
+can't stop
+won't go
+isn't it
+that's all
+what's up
+let's go
+here's why
+there's more
+who's there
+John's book
+the dog's bowl
+James' car
+the kids' toys
+1' tall
+5'10"
+6'2"
+12" ruler
+3' x 5'
+'test'
+'hello world'
+"hello world"
+'123'
+'a'
+"a"
+'1'
+"1"
+TRUE#LAST
+24-7-TEAM
+A-LAST-MINUTE
+1/26/11
+NOT ALL WHO WANDER
+LOCK AND KEY
+1 BY 1 INCH PILLOWS

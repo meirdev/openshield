@@ -1,0 +1,97 @@
+# Harmless HTML as submitted by rich-text editors and forums.
+<p>Hello world</p>
+<p>Hello <b>world</b></p>
+<p>Hello <strong>bold</strong> and <em>italic</em> text.</p>
+<br>
+<br/>
+<br />
+<hr>
+<h1>Title</h1>
+<h2 class="subtitle">Subtitle</h2>
+<ul><li>one</li><li>two</li></ul>
+<ol start="3"><li>three</li></ol>
+<blockquote>Quoted text</blockquote>
+<pre><code>let x = 1;</code></pre>
+<code>if (a &lt; b) {}</code>
+<a href="https://example.com">example</a>
+<a href="http://example.com/path?a=1&amp;b=2">link</a>
+<a href="/relative/path">relative</a>
+<a href="#section">anchor</a>
+<a href="mailto:someone@example.com">mail</a>
+<a href="tel:+15550100">call</a>
+<a href="ftp://files.example.com/x">ftp</a>
+<a href="https://example.com" target="_blank" rel="noopener noreferrer">new tab</a>
+<a href="https://example.com" title="Example &quot;site&quot;">quoted title</a>
+<img src="https://example.com/a.png" alt="A picture">
+<img src="/static/logo.png" width="100" height="50">
+<img src="data.png" alt="">
+<img src="images/database.jpg">
+<img src="https://example.com/javascript-logo.png" alt="javascript">
+<img src=x alt=y>
+<table><tr><th>a</th><td>b</td></tr></table>
+<table border="1" cellpadding="2"><tbody><tr><td>1</td></tr></tbody></table>
+<div class="card" id="main" data-id="42">content</div>
+<div style="color: red">red</div>
+<div style="background: url(/img/bg.png); margin: 0 auto">styled</div>
+<span style="font-weight: bold; font-size: 1.2em">big</span>
+<p style="text-align: center">centered</p>
+<td style="width: 100px; border: 1px solid #ccc">cell</td>
+<font color="red" size="3">old school</font>
+<center>centered</center>
+<u>underline</u> <s>strike</s> <sub>sub</sub> <sup>sup</sup>
+<abbr title="HyperText Markup Language">HTML</abbr>
+<cite>Citation</cite> <q>quote</q> <kbd>Ctrl</kbd> <mark>mark</mark>
+<dl><dt>term</dt><dd>definition</dd></dl>
+<figure><img src="/a.png"><figcaption>Caption</figcaption></figure>
+<section><article><header>h</header><footer>f</footer></article></section>
+<nav><a href="/">Home</a> | <a href="/about">About</a></nav>
+<label for="name">Name</label><input type="text" id="name" name="name" value="x">
+<input type="checkbox" checked disabled>
+<select name="s"><option value="1" selected>One</option></select>
+<textarea rows="3" cols="20">text</textarea>
+<button type="submit" class="btn">Go</button>
+<form action="/submit" method="post"><input name="q"></form>
+<form action="/search" method="get"></form>
+<video src="/movie.mp4" controls poster="/poster.jpg"></video>
+<audio src="/sound.mp3" controls></audio>
+<picture><source srcset="/a.webp" type="image/webp"><img src="/a.jpg"></picture>
+<details><summary>More</summary>Hidden text</details>
+<time datetime="2024-01-15">Jan 15</time>
+<progress value="70" max="100"></progress>
+<p>Use &lt;script&gt; carefully.</p>
+<p>&copy; 2024 Example &mdash; all rights reserved.</p>
+<p>Tom &amp; Jerry</p>
+<p lang="fr">Bonjour</p>
+<p dir="rtl">مرحبا</p>
+<span title='single quoted'>x</span>
+<p class=unquoted>x</p>
+<P>Uppercase tag</P>
+<DIV CLASS="X">uppercase attrs</DIV>
+<p>unclosed paragraph
+<b>unclosed bold
+text before <i>and after</i> tags
+<!-- a comment -->
+<!-- multi
+line comment -->
+<![CDATA[ raw data ]]>
+<p>a</p><p>b</p><p>c</p>
+<ul>
+  <li>indented</li>
+</ul>
+<a href="https://example.com/?redirect=/home&amp;x=1">query</a>
+<a href="https://example.com/data:something">path with colon</a>
+<a href="//cdn.example.com/lib.js">protocol relative</a>
+<a href="JAVASCRIPT-tutorial.html">file named javascript</a>
+<a href="data-sheet.pdf">data sheet</a>
+<a href="vbscript-history.html">vbscript history</a>
+<a href="https://example.com/javascript:void">path containing scheme</a>
+<a href="?javascript:x">query containing scheme</a>
+<a href="#javascript:x">fragment containing scheme</a>
+<img src="x.png" onion="ring">
+<div online="true">online attribute</div>
+<div data-onclick="x">data attribute</div>
+<div one="1" ones="2">short attrs</div>
+<span on="x">tiny attr</span>
+<div title=onclick=alert(1)>handler name inside a plain attribute</div>
+<div title="<script>alert(1)</script>">markup inside a plain attribute</div>
+<div class="javascript:alert(1)">scheme inside a plain attribute</div>
