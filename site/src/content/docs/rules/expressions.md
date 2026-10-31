@@ -59,7 +59,7 @@ Header lookups use lowercase names, while cookie and argument names retain their
 
 ## Functions
 
-Functions transform values (`lower`, `url_decode_uni`), detect attacks (`detect_sqli`, `detect_xss`), inspect strings (`starts_with`, `regex_capture`) and ask about detections (`is_jwt_valid`). Nest them freely:
+Functions transform values (`lowercase`, `url_decode_uni`), detect attacks (`detect_sqli`, `detect_xss`), inspect strings (`starts_with`, `regex_capture`) and ask about detections (`is_jwt_valid`). Nest them freely:
 
 ```text
 detect_xss(html_entity_decode(url_decode_uni(http.request.uri.query)))

@@ -22,7 +22,7 @@ Attackers encode payloads so a naive filter does not see them. Apply the transfo
 | `url_decode_uni`                                                               | Percent-encoding, including `%uXXXX`                           |
 | `html_entity_decode`                                                           | `&lt;`, `&#x3c;` and friends                                   |
 | `base64_decode`, `hex_decode`                                                  | Encoded parameters                                             |
-| `lower`                                                                        | Case variations                                                |
+| `lowercase`                                                                        | Case variations                                                |
 | `compress_whitespace`, `remove_whitespace`, `replace_comments`, `remove_nulls` | Padding, `/**/` comments and null bytes used to split keywords |
 
 ```text

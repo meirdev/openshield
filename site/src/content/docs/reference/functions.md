@@ -11,8 +11,8 @@ Transforms and detectors operate on strings, with `[*]` applying them to each el
 
 | Function                                     | Returns                                                                                                                         |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `lower(s)`, `upper(s)`                       | ASCII case conversion                                                                                                           |
-| `trim(s)`, `trim_start(s)`, `trim_end(s)`    | Without surrounding, leading or trailing ASCII whitespace                                                                       |
+| `lowercase(s)`, `uppercase(s)`               | ASCII case conversion                                                                                                           |
+| `trim(s)`, `trim_left(s)`, `trim_right(s)`   | Without surrounding, leading or trailing ASCII whitespace                                                                       |
 | `url_decode_uni(s)`                          | Percent-decoded, including `%uXXXX`                                                                                             |
 | `html_entity_decode(s)`                      | With HTML entities decoded                                                                                                      |
 | `js_decode(s)`                               | JavaScript escapes (`\uHHHH`, `\xHH`, octal, `\n`…) decoded; full-width `\uffXX` folded to ASCII                                |

@@ -2269,16 +2269,15 @@ dependencies = [
  "futures",
  "hex",
  "hmac",
- "html-escape",
  "ip_network",
  "ip_network_table",
  "jsonwebtoken",
  "log",
  "maxminddb",
- "md-5",
  "multer",
  "openshield-injection",
  "openshield-openapi",
+ "openshield-transforms",
  "pingora-limits",
  "regex",
  "serde",
@@ -2349,6 +2348,17 @@ dependencies = [
  "serde_yaml",
  "signal-hook 0.3.18",
  "tokio",
+]
+
+[[package]]
+name = "openshield-transforms"
+version = "0.2.0"
+dependencies = [
+ "base64",
+ "hex",
+ "html-escape",
+ "md-5",
+ "sha1",
 ]
 
 [[package]]

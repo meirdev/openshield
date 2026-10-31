@@ -1,15 +1,16 @@
+use std::borrow::Cow;
 use std::fmt;
 
 use wirefilter_engine::{
-    Array, ExpectedType, FunctionArgs, FunctionDefinition, FunctionDefinitionContext,
+    Array, Bytes, ExpectedType, FunctionArgs, FunctionDefinition, FunctionDefinitionContext,
     FunctionParam, FunctionParamError, GetType, LhsValue, ParserSettings, SimpleFunctionArgKind,
     SimpleFunctionDefinition, SimpleFunctionImpl, SimpleFunctionParam, Type,
 };
 
 pub type FnImpl = for<'a> fn(FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>>;
 
-/// Core transform: &[u8] -> Vec<u8>
-pub type BytesTransformFn = fn(&[u8]) -> Vec<u8>;
+/// Core transform: borrowed when the input needed no change.
+pub type BytesTransformFn = for<'a> fn(&'a [u8]) -> Cow<'a, [u8]>;
 
 /// Core predicate: &[u8] -> bool
 pub type BytesPredicateFn = fn(&[u8]) -> bool;
@@ -36,6 +37,25 @@ pub fn bytes_bytes_to_bool(f: FnImpl) -> SimpleFunctionDefinition {
 // ---------------------------------------------------------------------------
 // Polymorphic: accepts Bytes OR Array<Bytes>, maps element-wise
 // ---------------------------------------------------------------------------
+
+/// Applies `transform` without copying when the value is borrowed from the
+/// request and the transform leaves it alone.
+fn apply(transform: BytesTransformFn, value: Bytes<'_>) -> Bytes<'_> {
+    match value {
+        Bytes::Borrowed(slice) => transform(slice).into(),
+        Bytes::Owned(owned) => {
+            let changed = match transform(&owned) {
+                Cow::Owned(out) => Some(out),
+                Cow::Borrowed(same) if same.len() == owned.len() => None,
+                Cow::Borrowed(part) => Some(part.to_vec()),
+            };
+            match changed {
+                Some(out) => out.into(),
+                None => Bytes::Owned(owned),
+            }
+        }
+    }
+}
 
 /// Bytes|Array<Bytes> -> Bytes|Array<Bytes>
 /// Applies a byte transform to a single value or each element of an array.
@@ -96,13 +116,13 @@ impl FunctionDefinition for BytesTransformFunction {
         Box::new(move |args| {
             let arg = args.next()?.ok()?;
             match arg {
-                LhsValue::Bytes(b) => Some(LhsValue::Bytes(transform(&b).into())),
+                LhsValue::Bytes(b) => Some(LhsValue::Bytes(apply(transform, b))),
                 LhsValue::Array(arr) => {
                     let out: Vec<LhsValue<'_>> = arr
                         .into_iter()
                         .map(|item| {
                             if let LhsValue::Bytes(b) = item {
-                                LhsValue::Bytes(transform(&b).into())
+                                LhsValue::Bytes(apply(transform, b))
                             } else {
                                 item.into_owned()
                             }

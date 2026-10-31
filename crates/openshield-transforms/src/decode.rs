@@ -1,10 +1,18 @@
+//! Decoders that undo the encodings an attacker layers over a payload.
+
+use std::borrow::Cow;
+
 use base64::Engine as _;
 
-use super::string::is_space;
+use crate::string::is_space;
 
-pub fn url_decode_uni(input: &[u8]) -> Vec<u8> {
+/// ModSecurity `t:urlDecodeUni`: `%XX`, `%uXXXX` and `+`.
+///
+/// Full-width ASCII (`%uffXX`, low byte `0x01..=0x5e`) is folded to ASCII by
+/// adding `0x20`, as ModSecurity does. Malformed escapes pass through.
+pub fn url_decode_uni(input: &[u8]) -> Cow<'_, [u8]> {
     if !input.contains(&b'%') && !input.contains(&b'+') {
-        return input.to_vec();
+        return Cow::Borrowed(input);
     }
     let bytes = input;
     let mut result = Vec::with_capacity(bytes.len());
@@ -51,42 +59,49 @@ pub fn url_decode_uni(input: &[u8]) -> Vec<u8> {
             i += 1;
         }
     }
-    result
+    Cow::Owned(result)
 }
 
-pub fn base64_decode(input: &[u8]) -> Vec<u8> {
+/// ModSecurity `t:base64Decode`, accepting the URL-safe alphabet too.
+/// Input that is not base64 passes through.
+pub fn base64_decode(input: &[u8]) -> Cow<'_, [u8]> {
     base64::engine::general_purpose::STANDARD
         .decode(input)
         .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(input))
-        .unwrap_or_else(|_| input.to_vec())
+        .map_or(Cow::Borrowed(input), Cow::Owned)
 }
 
-pub fn hex_decode(input: &[u8]) -> Vec<u8> {
-    hex::decode(input).unwrap_or_else(|_| input.to_vec())
+/// ModSecurity `t:hexDecode`. Input that is not hex passes through.
+pub fn hex_decode(input: &[u8]) -> Cow<'_, [u8]> {
+    hex::decode(input).map_or(Cow::Borrowed(input), Cow::Owned)
 }
 
-pub fn html_entity_decode(input: &[u8]) -> Vec<u8> {
-    let s = match std::str::from_utf8(input) {
-        Ok(s) => s,
-        Err(_) => return input.to_vec(),
+/// ModSecurity `t:htmlEntityDecode`. Input that is not UTF-8 passes through.
+pub fn html_entity_decode(input: &[u8]) -> Cow<'_, [u8]> {
+    let Ok(s) = std::str::from_utf8(input) else {
+        return Cow::Borrowed(input);
     };
-    html_escape::decode_html_entities(s)
-        .into_owned()
-        .into_bytes()
+    match html_escape::decode_html_entities(s) {
+        Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
+        Cow::Owned(s) => Cow::Owned(s.into_bytes()),
+    }
 }
 
 const fn is_odigit(c: u8) -> bool {
     matches!(c, b'0'..=b'7')
 }
 
-/// Decode JavaScript backslash escapes.
+/// ModSecurity `t:jsDecode`: JavaScript backslash escapes.
 ///
 /// Handles `\uHHHH`, `\xHH`, octal `\OOO`, the C escapes `\a \b \f \n \r \t
 /// \v`, and a bare `\C` which just drops the backslash. Matches ModSecurity's
 /// quirks: `\uHHHH` keeps only the low byte, full-width ASCII (`\uffXX`, low
 /// byte `0x01..=0x5e`) is folded to ASCII by adding `0x20`, and a 3-digit
 /// octal that would exceed one byte falls back to 2 digits.
-pub fn js_decode(input: &[u8]) -> Vec<u8> {
+pub fn js_decode(input: &[u8]) -> Cow<'_, [u8]> {
+    if !input.contains(&b'\\') {
+        return Cow::Borrowed(input);
+    }
     let is_hex = |c: &u8| c.is_ascii_hexdigit();
 
     let mut out = Vec::with_capacity(input.len());
@@ -146,14 +161,17 @@ pub fn js_decode(input: &[u8]) -> Vec<u8> {
             }
         }
     }
-    out
+    Cow::Owned(out)
 }
 
-/// Decode ANSI-C escape sequences.
+/// ModSecurity `t:escapeSeqDecode`: ANSI C escape sequences.
 ///
 /// Handles `\a \b \f \n \r \t \v \\ \? \' \"`, `\xHH`, and octal `\OOO`
 /// (up to three digits, truncated to one byte). An unrecognised `\C` keeps `C`.
-pub fn escape_seq_decode(input: &[u8]) -> Vec<u8> {
+pub fn escape_seq_decode(input: &[u8]) -> Cow<'_, [u8]> {
+    if !input.contains(&b'\\') {
+        return Cow::Borrowed(input);
+    }
     let mut out = Vec::with_capacity(input.len());
     let mut i = 0;
     while i < input.len() {
@@ -203,17 +221,20 @@ pub fn escape_seq_decode(input: &[u8]) -> Vec<u8> {
         out.push(next);
         i += 2;
     }
-    out
+    Cow::Owned(out)
 }
 
-/// Decode CSS escapes.
+/// ModSecurity `t:cssDecode`: CSS escapes.
 ///
 /// A backslash starts an escape: 1-6 hex digits decode to a byte (only the
 /// last two hex digits are used; a single trailing whitespace is then
 /// consumed), a backslash-newline is a line continuation and drops both bytes,
 /// and any other `\C` keeps `C`. Matches ModSecurity's quirks, including the
 /// full-width ASCII fold (`\ff41` -> `a`) for the 4/5/6-digit `00ffXX` forms.
-pub fn css_decode(input: &[u8]) -> Vec<u8> {
+pub fn css_decode(input: &[u8]) -> Cow<'_, [u8]> {
+    if !input.contains(&b'\\') {
+        return Cow::Borrowed(input);
+    }
     let mut out = Vec::with_capacity(input.len());
     let mut i = 0;
     while i < input.len() {
@@ -275,7 +296,7 @@ pub fn css_decode(input: &[u8]) -> Vec<u8> {
             i += 1;
         }
     }
-    out
+    Cow::Owned(out)
 }
 
 /// Value of 1-3 octal digits, truncated to one byte.
@@ -286,19 +307,13 @@ fn octal(digits: &[u8]) -> u8 {
 }
 
 fn hex2(a: u8, b: u8) -> u8 {
-    let hi = match a {
-        b'0'..=b'9' => a - b'0',
-        b'a'..=b'f' => a - b'a' + 10,
-        b'A'..=b'F' => a - b'A' + 10,
+    let digit = |c: u8| match c {
+        b'0'..=b'9' => c - b'0',
+        b'a'..=b'f' => c - b'a' + 10,
+        b'A'..=b'F' => c - b'A' + 10,
         _ => 0,
     };
-    let lo = match b {
-        b'0'..=b'9' => b - b'0',
-        b'a'..=b'f' => b - b'a' + 10,
-        b'A'..=b'F' => b - b'A' + 10,
-        _ => 0,
-    };
-    (hi << 4) | lo
+    (digit(a) << 4) | digit(b)
 }
 
 #[cfg(test)]
@@ -307,136 +322,138 @@ mod tests {
 
     #[test]
     fn url_decode_passthrough_when_no_escapes() {
-        assert_eq!(url_decode_uni(b"plain text"), b"plain text");
-        assert_eq!(url_decode_uni(b""), b"");
+        assert!(matches!(url_decode_uni(b"plain text"), Cow::Borrowed(_)));
+        assert_eq!(&*url_decode_uni(b""), b"");
     }
 
     #[test]
     fn url_decode_plus_becomes_space() {
-        assert_eq!(url_decode_uni(b"a+b+c"), b"a b c");
+        assert_eq!(&*url_decode_uni(b"a+b+c"), b"a b c");
     }
 
     #[test]
     fn url_decode_percent_hex() {
         // %41 == 'A', case-insensitive hex digits.
-        assert_eq!(url_decode_uni(b"%41%42%43"), b"ABC");
-        assert_eq!(url_decode_uni(b"%2f"), b"/");
-        assert_eq!(url_decode_uni(b"%2F"), b"/");
+        assert_eq!(&*url_decode_uni(b"%41%42%43"), b"ABC");
+        assert_eq!(&*url_decode_uni(b"%2f"), b"/");
+        assert_eq!(&*url_decode_uni(b"%2F"), b"/");
         // Decodes a classic SQLi quote: %27 == '\''.
-        assert_eq!(url_decode_uni(b"1%27%20OR%201"), b"1' OR 1");
+        assert_eq!(&*url_decode_uni(b"1%27%20OR%201"), b"1' OR 1");
     }
 
     #[test]
     fn url_decode_unicode_escape() {
         // %u0041 -> 'A' (high pair "00", low pair "41").
-        assert_eq!(url_decode_uni(b"%u0041"), b"A");
+        assert_eq!(&*url_decode_uni(b"%u0041"), b"A");
         // Uppercase U is also accepted.
-        assert_eq!(url_decode_uni(b"%U0041"), b"A");
+        assert_eq!(&*url_decode_uni(b"%U0041"), b"A");
     }
 
     #[test]
     fn url_decode_fullwidth_normalization() {
         // %uffXX with high pair "ff" maps fullwidth ASCII back to ASCII:
         // 0x41 + 0x20 == 0x61 == 'a'. Defeats fullwidth-encoding bypasses.
-        assert_eq!(url_decode_uni(b"%uff41"), b"a");
+        assert_eq!(&*url_decode_uni(b"%uff41"), b"a");
     }
 
     #[test]
     fn url_decode_malformed_passes_through() {
         // Non-hex after % is left intact.
-        assert_eq!(url_decode_uni(b"%zz"), b"%zz");
+        assert_eq!(&*url_decode_uni(b"%zz"), b"%zz");
         // Truncated escape at end is left intact.
-        assert_eq!(url_decode_uni(b"abc%4"), b"abc%4");
-        assert_eq!(url_decode_uni(b"%"), b"%");
+        assert_eq!(&*url_decode_uni(b"abc%4"), b"abc%4");
+        assert_eq!(&*url_decode_uni(b"%"), b"%");
     }
 
     #[test]
     fn base64_decode_standard_and_urlsafe() {
-        assert_eq!(base64_decode(b"aGVsbG8="), b"hello");
+        assert_eq!(&*base64_decode(b"aGVsbG8="), b"hello");
         // URL-safe alphabet ('-' and '_') is accepted via fallback.
-        assert_eq!(base64_decode(b"-_8="), &[0xfb, 0xff]);
+        assert_eq!(&*base64_decode(b"-_8="), &[0xfb, 0xff]);
     }
 
     #[test]
     fn base64_decode_invalid_passes_through() {
-        assert_eq!(base64_decode(b"not valid!!"), b"not valid!!");
+        assert!(matches!(
+            base64_decode(b"not valid!!"),
+            Cow::Borrowed(b"not valid!!")
+        ));
     }
 
     #[test]
     fn hex_decode_roundtrip_and_invalid() {
-        assert_eq!(hex_decode(b"6162"), b"ab");
+        assert_eq!(&*hex_decode(b"6162"), b"ab");
         // Odd-length / non-hex input is returned unchanged.
-        assert_eq!(hex_decode(b"xyz"), b"xyz");
-        assert_eq!(hex_decode(b"616"), b"616");
+        assert!(matches!(hex_decode(b"xyz"), Cow::Borrowed(b"xyz")));
+        assert_eq!(&*hex_decode(b"616"), b"616");
     }
 
     #[test]
     fn html_entity_decode_basic() {
-        assert_eq!(html_entity_decode(b"&lt;script&gt;"), b"<script>");
-        assert_eq!(html_entity_decode(b"&amp;"), b"&");
-        assert_eq!(html_entity_decode(b"&#39;"), b"'");
-        // No entities -> unchanged.
-        assert_eq!(html_entity_decode(b"plain"), b"plain");
+        assert_eq!(&*html_entity_decode(b"&lt;script&gt;"), b"<script>");
+        assert_eq!(&*html_entity_decode(b"&amp;"), b"&");
+        assert_eq!(&*html_entity_decode(b"&#39;"), b"'");
+        assert!(matches!(html_entity_decode(b"plain"), Cow::Borrowed(_)));
     }
 
     #[test]
     fn html_entity_decode_invalid_utf8_passes_through() {
         let input = [0xff, 0xfe, 0x41];
-        assert_eq!(html_entity_decode(&input), &input);
+        assert_eq!(&*html_entity_decode(&input), &input);
     }
 
     #[test]
     fn js_decode_escapes() {
-        assert_eq!(js_decode(br"\x41\x42"), b"AB");
-        assert_eq!(js_decode(br"\u0041"), b"A");
-        assert_eq!(js_decode(br"a\tb\nc"), b"a\tb\nc");
-        assert_eq!(js_decode(br"\a\b\f\v"), &[0x07, 0x08, 0x0c, 0x0b]);
+        assert_eq!(&*js_decode(br"\x41\x42"), b"AB");
+        assert_eq!(&*js_decode(br"\u0041"), b"A");
+        assert_eq!(&*js_decode(br"a\tb\nc"), b"a\tb\nc");
+        assert_eq!(&*js_decode(br"\a\b\f\v"), &[0x07, 0x08, 0x0c, 0x0b]);
         // Unknown escapes drop the backslash.
-        assert_eq!(js_decode(br#"\"\\\'\q"#), br#""\'q"#);
+        assert_eq!(&*js_decode(br#"\"\\\'\q"#), br#""\'q"#);
         // Full-width ASCII \uffXX folds to ASCII; low byte 0x00 is not folded.
-        assert_eq!(js_decode(br"\uff41\uFF21"), b"aA");
-        assert_eq!(js_decode(br"\uff00"), &[0x00]);
+        assert_eq!(&*js_decode(br"\uff41\uFF21"), b"aA");
+        assert_eq!(&*js_decode(br"\uff00"), &[0x00]);
         // Octal: \412 would exceed a byte, so it is \41 ('!') + literal '2'.
-        assert_eq!(js_decode(br"\101"), b"A");
-        assert_eq!(js_decode(br"\412"), b"!2");
+        assert_eq!(&*js_decode(br"\101"), b"A");
+        assert_eq!(&*js_decode(br"\412"), b"!2");
         // Trailing lone backslash is kept.
-        assert_eq!(js_decode(br"ab\"), b"ab\\");
+        assert_eq!(&*js_decode(br"ab\"), b"ab\\");
         // Incomplete \xH falls through to the generic \C case.
-        assert_eq!(js_decode(br"\x4"), b"x4");
-        assert_eq!(js_decode(b"plain text"), b"plain text");
+        assert_eq!(&*js_decode(br"\x4"), b"x4");
+        assert!(matches!(js_decode(b"plain text"), Cow::Borrowed(_)));
     }
 
     #[test]
     fn escape_seq_decode_ansi_c() {
-        assert_eq!(escape_seq_decode(br"\n\t\r"), b"\n\t\r");
-        assert_eq!(escape_seq_decode(br"\x41\X42"), b"AB");
-        assert_eq!(escape_seq_decode(br"\101"), b"A");
+        assert_eq!(&*escape_seq_decode(br"\n\t\r"), b"\n\t\r");
+        assert_eq!(&*escape_seq_decode(br"\x41\X42"), b"AB");
+        assert_eq!(&*escape_seq_decode(br"\101"), b"A");
         // Octal truncates to a byte.
-        assert_eq!(escape_seq_decode(br"\777"), &[0xff]);
-        assert_eq!(escape_seq_decode(br#"\\\?\'\""#), br#"\?'""#);
-        assert_eq!(escape_seq_decode(br"\z"), b"z");
-        assert_eq!(escape_seq_decode(br"\xG1"), b"xG1");
-        assert_eq!(escape_seq_decode(br"ab\"), br"ab\");
-        assert_eq!(escape_seq_decode(b"plain"), b"plain");
+        assert_eq!(&*escape_seq_decode(br"\777"), &[0xff]);
+        assert_eq!(&*escape_seq_decode(br#"\\\?\'\""#), br#"\?'""#);
+        assert_eq!(&*escape_seq_decode(br"\z"), b"z");
+        assert_eq!(&*escape_seq_decode(br"\xG1"), b"xG1");
+        assert_eq!(&*escape_seq_decode(br"ab\"), br"ab\");
+        assert!(matches!(escape_seq_decode(b"plain"), Cow::Borrowed(_)));
     }
 
     #[test]
     fn css_decode_escapes() {
         // 1-6 hex digits, last two used; single trailing whitespace consumed.
-        assert_eq!(css_decode(br"\41"), b"A");
-        assert_eq!(css_decode(br"\41 B"), b"AB");
-        assert_eq!(css_decode(br"\000041"), b"A");
-        assert_eq!(css_decode(br"\4"), &[0x04]);
+        assert_eq!(&*css_decode(br"\41"), b"A");
+        assert_eq!(&*css_decode(br"\41 B"), b"AB");
+        assert_eq!(&*css_decode(br"\000041"), b"A");
+        assert_eq!(&*css_decode(br"\4"), &[0x04]);
         // Full-width fold for the 4/5/6-digit 00ffXX forms.
-        assert_eq!(css_decode(br"\ff41"), b"a");
-        assert_eq!(css_decode(br"\0ff41"), b"a");
-        assert_eq!(css_decode(br"\00ff21"), b"A");
+        assert_eq!(&*css_decode(br"\ff41"), b"a");
+        assert_eq!(&*css_decode(br"\0ff41"), b"a");
+        assert_eq!(&*css_decode(br"\00ff21"), b"A");
         // Non-hex \C keeps C; backslash-newline is a line continuation.
-        assert_eq!(css_decode(br"\."), b".");
-        assert_eq!(css_decode(b"a\\\nb"), b"ab");
-        assert_eq!(css_decode(br"\6a\61va"), b"java");
+        assert_eq!(&*css_decode(br"\."), b".");
+        assert_eq!(&*css_decode(b"a\\\nb"), b"ab");
+        assert_eq!(&*css_decode(br"\6a\61va"), b"java");
         // Trailing lone backslash is dropped.
-        assert_eq!(css_decode(br"ab\"), b"ab");
-        assert_eq!(css_decode(b"no escapes"), b"no escapes");
+        assert_eq!(&*css_decode(br"ab\"), b"ab");
+        assert!(matches!(css_decode(b"no escapes"), Cow::Borrowed(_)));
     }
 }

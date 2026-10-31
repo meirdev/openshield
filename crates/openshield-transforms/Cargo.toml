@@ -1,0 +1,17 @@
+[package]
+name = "openshield-transforms"
+description = "ModSecurity-compatible input transformations over raw bytes: decoding, normalization, encoding and hashing"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["hash"]
+# `md5` and `sha1`; off, the crate depends only on base64, hex and html-escape.
+hash = ["dep:md-5", "dep:sha1"]
+
+[dependencies]
+base64.workspace = true
+hex.workspace = true
+html-escape.workspace = true
+md-5 = { workspace = true, optional = true }
+sha1 = { workspace = true, optional = true }
