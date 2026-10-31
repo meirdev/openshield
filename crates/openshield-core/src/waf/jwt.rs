@@ -600,6 +600,6 @@ mod tests {
             "{err}"
         );
 
-        build(&config("lower(http.request.uri.args[\"token\"][0])")).unwrap();
+        build(&config("lowercase(http.request.uri.args[\"token\"][0])")).unwrap();
     }
 }

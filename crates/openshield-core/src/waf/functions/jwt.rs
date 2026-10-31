@@ -214,7 +214,7 @@ mod tests {
         assert!(eval(
             &scheme,
             &ctx,
-            r#"is_jwt_valid("api") and lower("ABC") == "abc""#
+            r#"is_jwt_valid("api") and lowercase("ABC") == "abc""#
         ));
     }
 

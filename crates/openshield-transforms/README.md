@@ -9,10 +9,10 @@ borrowed when the input needed no change and owned otherwise, so a chain of
 transforms over ordinary input allocates nothing:
 
 ```rust
-use openshield_transforms::{lower, url_decode_uni};
+use openshield_transforms::{lowercase, url_decode_uni};
 
 let decoded = url_decode_uni(b"1%27%20OR%201");   // owned: "1' OR 1"
-let same = lower(b"already lower");               // borrowed
+let same = lowercase(b"already lowercase");               // borrowed
 ```
 
 ## Functions
@@ -26,8 +26,8 @@ let same = lower(b"already lower");               // borrowed
 | `escape_seq_decode` | `t:escapeSeqDecode` | ANSI C escapes |
 | `base64_decode` | `t:base64Decode` | standard or URL-safe alphabet; invalid passes through |
 | `hex_decode` | `t:hexDecode` | invalid passes through |
-| `lower`, `upper` | `t:lowercase`, `t:uppercase` | ASCII only |
-| `trim`, `trim_start`, `trim_end` | `t:trim`, `t:trimLeft`, `t:trimRight` | always borrowed |
+| `lowercase`, `uppercase` | `t:lowercase`, `t:uppercase` | ASCII only |
+| `trim`, `trim_left`, `trim_right` | `t:trim`, `t:trimLeft`, `t:trimRight` | always borrowed |
 | `remove_nulls`, `replace_nulls` | `t:removeNulls`, `t:replaceNulls` | |
 | `remove_whitespace`, `compress_whitespace` | `t:removeWhitespace`, `t:compressWhitespace` | C `isspace` set |
 | `replace_comments`, `remove_comments` | `t:replaceComments`, `t:removeComments` | ModSecurity's quirks kept |

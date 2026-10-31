@@ -345,7 +345,7 @@ mod tests {
         #[test]
         fn has_key_with_a_dynamic_key() {
             assert!(eval(
-                r#"has_key(http.request.headers, lower(http.request.uri.args.names[0]))"#
+                r#"has_key(http.request.headers, lowercase(http.request.uri.args.names[0]))"#
             ));
             assert!(!eval(
                 r#"has_key(http.request.headers, http.request.uri.args.names[0])"#
@@ -363,7 +363,7 @@ mod tests {
             ));
             assert!(eval(r#"has_value(http.request.uri.args.values, "2")"#));
             assert!(eval(
-                r#"has_value(http.request.headers.names, lower(http.request.uri.args.names[0]))"#
+                r#"has_value(http.request.headers.names, lowercase(http.request.uri.args.names[0]))"#
             ));
         }
 

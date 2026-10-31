@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 /// ModSecurity `t:lowercase`, ASCII only.
-pub fn lower(input: &[u8]) -> Cow<'_, [u8]> {
+pub fn lowercase(input: &[u8]) -> Cow<'_, [u8]> {
     if input.iter().any(u8::is_ascii_uppercase) {
         Cow::Owned(input.to_ascii_lowercase())
     } else {
@@ -12,7 +12,7 @@ pub fn lower(input: &[u8]) -> Cow<'_, [u8]> {
 }
 
 /// ModSecurity `t:uppercase`, ASCII only.
-pub fn upper(input: &[u8]) -> Cow<'_, [u8]> {
+pub fn uppercase(input: &[u8]) -> Cow<'_, [u8]> {
     if input.iter().any(u8::is_ascii_lowercase) {
         Cow::Owned(input.to_ascii_uppercase())
     } else {
@@ -26,12 +26,12 @@ pub fn trim(input: &[u8]) -> Cow<'_, [u8]> {
 }
 
 /// ModSecurity `t:trimLeft`.
-pub fn trim_start(input: &[u8]) -> Cow<'_, [u8]> {
+pub fn trim_left(input: &[u8]) -> Cow<'_, [u8]> {
     Cow::Borrowed(input.trim_ascii_start())
 }
 
 /// ModSecurity `t:trimRight`.
-pub fn trim_end(input: &[u8]) -> Cow<'_, [u8]> {
+pub fn trim_right(input: &[u8]) -> Cow<'_, [u8]> {
     Cow::Borrowed(input.trim_ascii_end())
 }
 
@@ -350,17 +350,17 @@ mod tests {
 
     #[test]
     fn lower_upper_ascii_only() {
-        assert_eq!(&*lower(b"AbC123"), b"abc123");
-        assert_eq!(&*upper(b"AbC123"), b"ABC123");
+        assert_eq!(&*lowercase(b"AbC123"), b"abc123");
+        assert_eq!(&*uppercase(b"AbC123"), b"ABC123");
         // Non-ASCII bytes are untouched (ASCII-only casing).
         let utf8 = "É".as_bytes();
-        assert_eq!(&*lower(utf8), utf8);
+        assert_eq!(&*lowercase(utf8), utf8);
     }
 
     #[test]
     fn unchanged_input_is_borrowed() {
-        assert!(matches!(lower(b"abc"), Cow::Borrowed(_)));
-        assert!(matches!(lower(b"Abc"), Cow::Owned(_)));
+        assert!(matches!(lowercase(b"abc"), Cow::Borrowed(_)));
+        assert!(matches!(lowercase(b"Abc"), Cow::Owned(_)));
         assert!(matches!(trim(b"  a  "), Cow::Borrowed(_)));
         assert!(matches!(remove_nulls(b"abc"), Cow::Borrowed(_)));
         assert!(matches!(compress_whitespace(b"a b c"), Cow::Borrowed(_)));
@@ -376,15 +376,15 @@ mod tests {
     fn trim_variants() {
         assert_eq!(&*trim(b"  hello  "), b"hello");
         assert_eq!(&*trim(b"\t\n hi \r\n"), b"hi");
-        assert_eq!(&*trim_start(b"  hello  "), b"hello  ");
-        assert_eq!(&*trim_end(b"  hello  "), b"  hello");
+        assert_eq!(&*trim_left(b"  hello  "), b"hello  ");
+        assert_eq!(&*trim_right(b"  hello  "), b"  hello");
     }
 
     #[test]
     fn trim_all_whitespace_is_empty() {
         assert_eq!(&*trim(b"    "), b"");
-        assert_eq!(&*trim_start(b"    "), b"");
-        assert_eq!(&*trim_end(b"    "), b"");
+        assert_eq!(&*trim_left(b"    "), b"");
+        assert_eq!(&*trim_right(b"    "), b"");
         assert_eq!(&*trim(b""), b"");
     }
 

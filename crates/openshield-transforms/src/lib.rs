@@ -19,7 +19,7 @@ pub use encode::{base64_encode, hex_encode, utf8_to_unicode};
 #[cfg(feature = "hash")]
 pub use encode::{md5, sha1};
 pub use string::{
-    cmd_line, compress_whitespace, lower, normalize_path, normalize_path_win, remove_comments,
-    remove_nulls, remove_whitespace, replace_comments, replace_nulls, trim, trim_end, trim_start,
-    upper,
+    cmd_line, compress_whitespace, lowercase, normalize_path, normalize_path_win, remove_comments,
+    remove_nulls, remove_whitespace, replace_comments, replace_nulls, trim, trim_left, trim_right,
+    uppercase,
 };

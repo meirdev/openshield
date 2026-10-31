@@ -19,13 +19,13 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
     // String transform functions (polymorphic: Bytes|Array<Bytes> ->
     // Bytes|Array<Bytes>)
     b.add_function(
-        "lower",
-        BytesTransformFunction::new("lower", transforms::lower),
+        "lowercase",
+        BytesTransformFunction::new("lowercase", transforms::lowercase),
     )
     .unwrap();
     b.add_function(
-        "upper",
-        BytesTransformFunction::new("upper", transforms::upper),
+        "uppercase",
+        BytesTransformFunction::new("uppercase", transforms::uppercase),
     )
     .unwrap();
     b.add_function(
@@ -34,13 +34,13 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
     )
     .unwrap();
     b.add_function(
-        "trim_start",
-        BytesTransformFunction::new("trim_start", transforms::trim_start),
+        "trim_left",
+        BytesTransformFunction::new("trim_left", transforms::trim_left),
     )
     .unwrap();
     b.add_function(
-        "trim_end",
-        BytesTransformFunction::new("trim_end", transforms::trim_end),
+        "trim_right",
+        BytesTransformFunction::new("trim_right", transforms::trim_right),
     )
     .unwrap();
     b.add_function(
@@ -231,24 +231,24 @@ mod tests {
 
     #[test]
     fn transform_then_compare() {
-        // Polymorphic Bytes path: lower(field) applied before comparison.
-        assert!(eval_bytes(r#"lower(http.host) == "abc""#, HOST, b"ABC"));
+        // Polymorphic Bytes path: lowercase(field) applied before comparison.
+        assert!(eval_bytes(r#"lowercase(http.host) == "abc""#, HOST, b"ABC"));
         // A transform that changes nothing still compares correctly.
-        assert!(eval_bytes(r#"lower(http.host) == "abc""#, HOST, b"abc"));
+        assert!(eval_bytes(r#"lowercase(http.host) == "abc""#, HOST, b"abc"));
         assert!(eval_bytes(r#"trim(http.host) == "abc""#, HOST, b"  abc "));
     }
 
     #[test]
     fn transform_over_array() {
-        // Polymorphic Array path: lower() maps element-wise over the array,
+        // Polymorphic Array path: lowercase() maps element-wise over the array,
         // feeding its transformed array into detect_sqli's array path.
         assert!(eval_array(
-            "any(detect_sqli(lower(http.request.uri.args.values[*])))",
+            "any(detect_sqli(lowercase(http.request.uri.args.values[*])))",
             "http.request.uri.args.values",
             &[b"benign", b"1' OR '1'='1"],
         ));
         assert!(!eval_array(
-            "any(detect_sqli(lower(http.request.uri.args.values[*])))",
+            "any(detect_sqli(lowercase(http.request.uri.args.values[*])))",
             "http.request.uri.args.values",
             &[b"hello", b"world"],
         ));

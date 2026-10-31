@@ -93,7 +93,7 @@ rulesets:
         expression: 'starts_with(http.request.uri.path, "/admin/") and not ip.src in $office'
       - id: no-php
         action: block
-        expression: 'lower(http.request.uri.path) matches "\\.(php|asp|jsp)$"'
+        expression: 'lowercase(http.request.uri.path) matches "\\.(php|asp|jsp)$"'
       - id: login-rate-limit
         action: block
         expression: 'http.request.method == "POST" and http.request.uri.path == "/login"'
@@ -721,7 +721,7 @@ fn expressions(c: &mut Criterion) {
         ("ua_substring_list", "http.user_agent in $scanner_ua"),
         (
             "lower_matches",
-            r#"lower(http.request.uri.path) matches "\.(php|asp|jsp)$""#,
+            r#"lowercase(http.request.uri.path) matches "\.(php|asp|jsp)$""#,
         ),
         (
             "sqli_args",
@@ -760,7 +760,7 @@ fn expressions(c: &mut Criterion) {
         // Two owned copies of every value, although neither transform changes them.
         (
             "transform_chain_args",
-            r#"any(url_decode_uni(lower(http.request.uri.args.values))[*] == "zzz")"#,
+            r#"any(url_decode_uni(lowercase(http.request.uri.args.values))[*] == "zzz")"#,
         ),
     ];
     let mut group = c.benchmark_group("expression");
