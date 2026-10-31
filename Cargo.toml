@@ -4,6 +4,7 @@ members = [
     "crates/openshield-openapi",
     "crates/openshield-core",
     "crates/openshield-injection",
+    "crates/openshield-transforms",
     "crates/openshield-pingora",
     "crates/openshield-nginx",
 ]
@@ -14,6 +15,7 @@ default-members = [
     "crates/openshield-openapi",
     "crates/openshield-core",
     "crates/openshield-injection",
+    "crates/openshield-transforms",
     "crates/openshield-pingora",
 ]
 
@@ -25,6 +27,7 @@ edition = "2024"
 openshield-openapi = { path = "crates/openshield-openapi" }
 openshield-core = { path = "crates/openshield-core" }
 openshield-injection = { path = "crates/openshield-injection" }
+openshield-transforms = { path = "crates/openshield-transforms" }
 
 wirefilter-engine = { git = "https://github.com/cloudflare/wirefilter.git", branch = "master", package = "wirefilter-engine" }
 serde = { version = "1", features = ["derive"] }

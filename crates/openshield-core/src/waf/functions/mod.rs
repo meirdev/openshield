@@ -1,17 +1,15 @@
-mod decode;
 mod detect;
-mod encode;
 mod generic;
 pub mod helpers;
 mod json;
 mod jwt;
 mod regex;
-mod string;
 
 use std::sync::Arc;
 
 use helpers::{BytesPredicateFunction, BytesTransformFunction};
 pub use jwt::{PRESENT_FIELD, RuleCompiler, VALID_FIELD};
+use openshield_transforms as transforms;
 use wirefilter_engine::ConcatFunction;
 
 /// `token_ids` are the token configuration IDs the JWT functions accept.
@@ -20,65 +18,74 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
 
     // String transform functions (polymorphic: Bytes|Array<Bytes> ->
     // Bytes|Array<Bytes>)
-    b.add_function("lower", BytesTransformFunction::new("lower", string::lower))
-        .unwrap();
-    b.add_function("upper", BytesTransformFunction::new("upper", string::upper))
-        .unwrap();
-    b.add_function("trim", BytesTransformFunction::new("trim", string::trim))
-        .unwrap();
+    b.add_function(
+        "lower",
+        BytesTransformFunction::new("lower", transforms::lower),
+    )
+    .unwrap();
+    b.add_function(
+        "upper",
+        BytesTransformFunction::new("upper", transforms::upper),
+    )
+    .unwrap();
+    b.add_function(
+        "trim",
+        BytesTransformFunction::new("trim", transforms::trim),
+    )
+    .unwrap();
     b.add_function(
         "trim_start",
-        BytesTransformFunction::new("trim_start", string::trim_start),
+        BytesTransformFunction::new("trim_start", transforms::trim_start),
     )
     .unwrap();
     b.add_function(
         "trim_end",
-        BytesTransformFunction::new("trim_end", string::trim_end),
+        BytesTransformFunction::new("trim_end", transforms::trim_end),
     )
     .unwrap();
     b.add_function(
         "remove_nulls",
-        BytesTransformFunction::new("remove_nulls", string::remove_nulls),
+        BytesTransformFunction::new("remove_nulls", transforms::remove_nulls),
     )
     .unwrap();
     b.add_function(
         "replace_nulls",
-        BytesTransformFunction::new("replace_nulls", string::replace_nulls),
+        BytesTransformFunction::new("replace_nulls", transforms::replace_nulls),
     )
     .unwrap();
     b.add_function(
         "remove_whitespace",
-        BytesTransformFunction::new("remove_whitespace", string::remove_whitespace),
+        BytesTransformFunction::new("remove_whitespace", transforms::remove_whitespace),
     )
     .unwrap();
     b.add_function(
         "compress_whitespace",
-        BytesTransformFunction::new("compress_whitespace", string::compress_whitespace),
+        BytesTransformFunction::new("compress_whitespace", transforms::compress_whitespace),
     )
     .unwrap();
     b.add_function(
         "replace_comments",
-        BytesTransformFunction::new("replace_comments", string::replace_comments),
+        BytesTransformFunction::new("replace_comments", transforms::replace_comments),
     )
     .unwrap();
     b.add_function(
         "remove_comments",
-        BytesTransformFunction::new("remove_comments", string::remove_comments),
+        BytesTransformFunction::new("remove_comments", transforms::remove_comments),
     )
     .unwrap();
     b.add_function(
         "cmd_line",
-        BytesTransformFunction::new("cmd_line", string::cmd_line),
+        BytesTransformFunction::new("cmd_line", transforms::cmd_line),
     )
     .unwrap();
     b.add_function(
         "normalize_path",
-        BytesTransformFunction::new("normalize_path", string::normalize_path),
+        BytesTransformFunction::new("normalize_path", transforms::normalize_path),
     )
     .unwrap();
     b.add_function(
         "normalize_path_win",
-        BytesTransformFunction::new("normalize_path_win", string::normalize_path_win),
+        BytesTransformFunction::new("normalize_path_win", transforms::normalize_path_win),
     )
     .unwrap();
 
@@ -93,70 +100,73 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
         .unwrap();
     b.add_function(
         "starts_with",
-        helpers::bytes_bytes_to_bool(string::starts_with_fn),
+        helpers::bytes_bytes_to_bool(generic::starts_with_fn),
     )
     .unwrap();
     b.add_function(
         "ends_with",
-        helpers::bytes_bytes_to_bool(string::ends_with_fn),
+        helpers::bytes_bytes_to_bool(generic::ends_with_fn),
     )
     .unwrap();
 
     // Decoding functions (polymorphic)
     b.add_function(
         "url_decode_uni",
-        BytesTransformFunction::new("url_decode_uni", decode::url_decode_uni),
+        BytesTransformFunction::new("url_decode_uni", transforms::url_decode_uni),
     )
     .unwrap();
     b.add_function(
         "base64_decode",
-        BytesTransformFunction::new("base64_decode", decode::base64_decode),
+        BytesTransformFunction::new("base64_decode", transforms::base64_decode),
     )
     .unwrap();
     b.add_function(
         "hex_decode",
-        BytesTransformFunction::new("hex_decode", decode::hex_decode),
+        BytesTransformFunction::new("hex_decode", transforms::hex_decode),
     )
     .unwrap();
     b.add_function(
         "html_entity_decode",
-        BytesTransformFunction::new("html_entity_decode", decode::html_entity_decode),
+        BytesTransformFunction::new("html_entity_decode", transforms::html_entity_decode),
     )
     .unwrap();
     b.add_function(
         "js_decode",
-        BytesTransformFunction::new("js_decode", decode::js_decode),
+        BytesTransformFunction::new("js_decode", transforms::js_decode),
     )
     .unwrap();
     b.add_function(
         "css_decode",
-        BytesTransformFunction::new("css_decode", decode::css_decode),
+        BytesTransformFunction::new("css_decode", transforms::css_decode),
     )
     .unwrap();
     b.add_function(
         "escape_seq_decode",
-        BytesTransformFunction::new("escape_seq_decode", decode::escape_seq_decode),
+        BytesTransformFunction::new("escape_seq_decode", transforms::escape_seq_decode),
     )
     .unwrap();
 
     // Encoding functions (polymorphic)
     b.add_function(
         "base64_encode",
-        BytesTransformFunction::new("base64_encode", encode::base64_encode),
+        BytesTransformFunction::new("base64_encode", transforms::base64_encode),
     )
     .unwrap();
     b.add_function(
         "hex_encode",
-        BytesTransformFunction::new("hex_encode", encode::hex_encode),
+        BytesTransformFunction::new("hex_encode", transforms::hex_encode),
     )
     .unwrap();
-    b.add_function("md5", BytesTransformFunction::new("md5", encode::md5))
-        .unwrap();
-    b.add_function("sha1", BytesTransformFunction::new("sha1", encode::sha1))
+    b.add_function("md5", BytesTransformFunction::new("md5", transforms::md5))
         .unwrap();
     b.add_function(
+        "sha1",
+        BytesTransformFunction::new("sha1", transforms::sha1),
+    )
+    .unwrap();
+    b.add_function(
         "utf8_to_unicode",
-        BytesTransformFunction::new("utf8_to_unicode", encode::utf8_to_unicode),
+        BytesTransformFunction::new("utf8_to_unicode", transforms::utf8_to_unicode),
     )
     .unwrap();
 
@@ -190,6 +200,58 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
     for name in [jwt::IS_JWT_VALID, jwt::IS_JWT_PRESENT] {
         b.add_function(name, jwt::JwtFunction::new(token_ids.clone()))
             .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::{eval_array, eval_bytes};
+
+    const HOST: &str = "http.host";
+
+    #[test]
+    fn starts_with_literal() {
+        assert!(eval_bytes(
+            r#"starts_with(http.host, "he")"#,
+            HOST,
+            b"hello"
+        ));
+        assert!(!eval_bytes(
+            r#"starts_with(http.host, "xy")"#,
+            HOST,
+            b"hello"
+        ));
+    }
+
+    #[test]
+    fn ends_with_literal() {
+        assert!(eval_bytes(r#"ends_with(http.host, "lo")"#, HOST, b"hello"));
+        assert!(!eval_bytes(r#"ends_with(http.host, "xy")"#, HOST, b"hello"));
+    }
+
+    #[test]
+    fn transform_then_compare() {
+        // Polymorphic Bytes path: lower(field) applied before comparison.
+        assert!(eval_bytes(r#"lower(http.host) == "abc""#, HOST, b"ABC"));
+        // A transform that changes nothing still compares correctly.
+        assert!(eval_bytes(r#"lower(http.host) == "abc""#, HOST, b"abc"));
+        assert!(eval_bytes(r#"trim(http.host) == "abc""#, HOST, b"  abc "));
+    }
+
+    #[test]
+    fn transform_over_array() {
+        // Polymorphic Array path: lower() maps element-wise over the array,
+        // feeding its transformed array into detect_sqli's array path.
+        assert!(eval_array(
+            "any(detect_sqli(lower(http.request.uri.args.values[*])))",
+            "http.request.uri.args.values",
+            &[b"benign", b"1' OR '1'='1"],
+        ));
+        assert!(!eval_array(
+            "any(detect_sqli(lower(http.request.uri.args.values[*])))",
+            "http.request.uri.args.values",
+            &[b"hello", b"world"],
+        ));
     }
 }
 

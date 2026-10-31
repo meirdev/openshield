@@ -269,6 +269,26 @@ impl FunctionDefinition for ExceptFunction {
     }
 }
 
+pub fn starts_with_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
+    let LhsValue::Bytes(input) = args.next()?.ok()? else {
+        return None;
+    };
+    let LhsValue::Bytes(prefix) = args.next()?.ok()? else {
+        return None;
+    };
+    Some(LhsValue::Bool(input.starts_with(&prefix)))
+}
+
+pub fn ends_with_fn<'a>(args: FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>> {
+    let LhsValue::Bytes(input) = args.next()?.ok()? else {
+        return None;
+    };
+    let LhsValue::Bytes(suffix) = args.next()?.ok()? else {
+        return None;
+    };
+    Some(LhsValue::Bool(input.ends_with(&suffix)))
+}
+
 #[cfg(test)]
 mod tests {
     mod via_scheme {
