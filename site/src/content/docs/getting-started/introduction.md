@@ -27,7 +27,7 @@ Added to a proxy configuration with `listen` and `upstream`, this rule blocks wh
 
 Use these capabilities together in a policy:
 
-- **Injection detection** with libinjection, behind transforms that undo the encodings attackers use.
+- **Injection detection** for SQL injection and XSS, behind transforms that undo the encodings attackers use.
 - **JWT validation** against keys you configure, with the token's claims exposed as fields.
 - **Schema validation** of requests against an OpenAPI document, with every violation exposed as fields.
 - **GeoIP**, **IP and string lists**, **per-request scores** and **rate limits** by any combination of fields.

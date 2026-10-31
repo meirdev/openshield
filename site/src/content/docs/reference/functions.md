@@ -36,8 +36,8 @@ Transforms and detectors operate on strings, with `[*]` applying them to each el
 
 | Function         | Returns                                                             |
 | ---------------- | ------------------------------------------------------------------- |
-| `detect_sqli(s)` | `true` if the string looks like SQL injection (libinjection)        |
-| `detect_xss(s)`  | `true` if the string looks like cross-site scripting (libinjection) |
+| `detect_sqli(s)` | `true` if the string would change the meaning of an SQL query       |
+| `detect_xss(s)`  | `true` if the string would execute if reflected into HTML           |
 
 ## Strings
 

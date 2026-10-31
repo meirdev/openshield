@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-`detect_sqli` and `detect_xss` use [libinjection](https://github.com/libinjection/libinjection) to check whether a string resembles SQL injection or XSS. Use `[*]` to check each array element:
+`detect_sqli` follows [libinjection](https://github.com/libinjection/libinjection)'s method: it tokenizes the string as SQL in the contexts a query could splice it into (bare, or inside a single- or double-quoted string), folds the tokens down to their structure and looks the resulting fingerprint up in a database of shapes seen in attacks. `detect_xss` uses OpenShield's own detector: it tokenizes the string as HTML in every context a page could reflect it into (text, or inside an attribute value with any quoting) and flags markup that would execute, such as script-bearing tags, event handler attributes, `javascript:` URLs, executable style constructs and dangling-markup exfiltration. It does not flag inline styles or unknown tags on their own. Use `[*]` to check each array element:
 
 ```text
 any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))
@@ -66,4 +66,4 @@ rulesets:
         expression: "score.sqli >= 10"
 ```
 
-Since detectors can miss attacks or flag benign input, review representative traffic with `detection_only: true` before enforcing the policy. If you need the matching field values to investigate a result, enable `log_payloads` after reviewing what the audit log [captures](../../configuration/logging/#captured-data).
+Since detectors can miss attacks or flag benign input, review representative traffic with `detection_only: true` before enforcing the policy. If you need the matching field values to investigate a result, enable `log_payloads` after reviewing what the audit log [captures](../../configuration/logging/#captured-data). At `debug` log level, both functions also log why they matched, for example `detect_xss: onerror attribute in text context` or `detect_sqli: s&sos fingerprint in single-quoted context`.

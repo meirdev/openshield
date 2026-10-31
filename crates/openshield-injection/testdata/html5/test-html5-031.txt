@@ -1,0 +1,9 @@
+--TEST--
+(openshield: upstream emits TAG_NAME_OPEN here; an end tag with whitespace before > is still an end tag)
+tag with name attribute, quoted value, unclosed
+--INPUT--
+</foo  >
+--EXPECTED--
+TAG_CLOSE,3,foo
+TAG_NAME_CLOSE,1,>
+

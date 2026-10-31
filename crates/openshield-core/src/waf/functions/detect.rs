@@ -1,9 +1,21 @@
 pub fn detect_sqli(input: &[u8]) -> bool {
-    libinjectionrs::detect_sqli(input).is_injection()
+    match openshield_injection::detect_sqli(input) {
+        Some(finding) => {
+            log::debug!("detect_sqli: {finding}");
+            true
+        }
+        None => false,
+    }
 }
 
 pub fn detect_xss(input: &[u8]) -> bool {
-    libinjectionrs::detect_xss(input).is_injection()
+    match openshield_injection::detect_xss(input) {
+        Some(finding) => {
+            log::debug!("detect_xss: {finding}");
+            true
+        }
+        None => false,
+    }
 }
 
 #[cfg(test)]

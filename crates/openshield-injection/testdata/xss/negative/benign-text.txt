@@ -1,0 +1,179 @@
+# Ordinary user input that looks a little like markup or code.
+hello world
+Hello, World!
+1 < 2 && 3 > 2
+a<b
+a < b > c
+x<y>z
+if (a < b && c > d) { return 0; }
+for (i = 0; i < n; i++) sum += a[i];
+Vec<String>
+List<Map<String, Object>>
+HashMap<K, V>
+std::vector<int> v;
+template <typename T> class Foo {};
+#include <stdio.h>
+#include <iostream>
+cat file.txt > out.txt
+echo "hi" >> log.txt 2>&1
+grep -r "foo" . | sort < input
+x => x + 1
+const f = (a, b) => a + b;
+<- back
+-> next
+<<EOF
+<=
+>=
+!=
+<>
+<3 you
+I <3 Rust
+:-) >:( :-< <:-)
+He said "hello" and left.
+She said 'bye' & left.
+fish & chips
+AT&T
+R&D department
+&nbsp;
+&amp;&lt;&gt;
+5 > 3 is true
+Price < $10
+Temperature was <0 degrees
+Rating: 4/5 <-- good
+Use the <b> tag for bold text.
+The <br> element inserts a line break.
+Wrap it in <p> tags.
+Compare <div> and <span>.
+What does <table> do?
+Is <center> deprecated?
+<3
+<>
+< >
+<-->
+<--
+-->
+<!--
+<!-- just a comment -->
+<!---->
+<![CDATA[ some data ]]>
+<?php echo "hi"; ?>
+<%= name %>
+{{ user.name }}
+{% if user %}Hi{% endif %}
+${user.name}
+#{user.name}
+$(document).ready()
+SELECT * FROM users WHERE id = 1
+INSERT INTO t VALUES (1, 'a')
+DROP TABLE IF EXISTS t
+user@example.com
+first.last+tag@example.co.uk
+https://example.com/path?a=1&b=2#frag
+http://example.com/search?q=hello+world&page=2
+ftp://files.example.com/pub/
+mailto:someone@example.com
+tel:+1-555-0100
+www.example.com
+example.com/data
+/api/v1/users?limit=10&offset=20
+C:\Users\Alice\Documents\file.txt
+/usr/local/bin/python3
+../../etc/passwd
+~/projects/openshield
+file:///home/user/doc.pdf
+2024-01-15T10:30:00Z
+15/01/2024
+01-15-2024 10:30
+192.168.1.1
+2001:db8::1
+00:1A:2B:3C:4D:5E
+{"name": "Alice", "age": 30, "tags": ["a", "b"]}
+[1, 2, 3, {"x": null}]
+{"html": "<p>hi</p>"}
+key=value
+a=1&b=2&c=3
+name=John+Doe&city=New+York
+color: red; font-size: 12px;
+body { margin: 0; padding: 0 }
+.class > .child { color: blue }
+a:hover { text-decoration: underline }
+@media (max-width: 600px) { .x { display: none } }
+background: url(/images/bg.png)
+width: calc(100% - 20px)
+data-id=123
+data-toggle=modal
+on=1
+online=yes
+only=true
+onion rings
+ones and zeros
+style guide
+style=modern
+src/main.rs
+src=/img/logo.png
+href=/about
+action=save
+action=delete&id=5
+from=alice&to=bob
+from 10am to 5pm
+values=1,2,3
+by=author
+to=recipient@example.com
+the onclick handler is documented here
+see the href attribute
+add an onload event listener in JS
+the script tag
+javascript tutorial for beginners
+Learn JavaScript in 30 days
+vbscript is obsolete
+view-source is a browser feature
+data science
+data:image is a scheme
+base64: SGVsbG8gd29ybGQ=
+SGVsbG8gd29ybGQhIFRoaXMgaXMgYmFzZTY0Lg==
+deadbeef0123456789abcdef
+ab12cd34ef56
+0x1F600
+U+1F600
+\u00e9\u00e8
+caf\xc3\xa9
+日本語テキスト
+Привет мир
+مرحبا بالعالم
+emoji 😀 🎉 ✨
+TRUE#LAST
+24-7-TEAM
+1D0AA0A700000004/9GUH7NYWTMDHBAA
+Hi, 1.e be happy to assist
+<<<<<<< HEAD
+>>>>>>> branch
+=======
+--- a/file.rs
++++ b/file.rs
+@@ -1,3 +1,4 @@
+diff --git a/x b/y
+fn main() { println!("<{}>", 1); }
+let x: Option<&[u8]> = None;
+impl<T> Trait for Vec<T> {}
+println!("{:>8} {:<8}", a, b);
+printf("%d < %d\n", a, b);
+System.out.println("a < b");
+assert a < b, "a should be less than b"
+<unknown>
+<empty>
+<none>
+<nil>
+<missing>
+<redacted>
+<name>
+<first name>
+<your-email@example.com>
+John Smith <john@example.com>
+"John Smith" <john@example.com>
+<#>
+<$>
+<@user>
+<123>
+<-5>
+<1.5>
+<!important>

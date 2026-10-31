@@ -1,0 +1,95 @@
+# PortSwigger XSS cheat sheet payloads, extracted from
+# https://portswigger.net/web-security/cross-site-scripting/cheat-sheet
+# Lines are URL-decoded before use, like the libinjection corpus.
+# Payloads the cheat sheet injects into a URL attribute, wrapped in the
+# element the sheet uses so the detector sees the attribute.
+
+# context: attribute_href
+<a%20href="%0Ajavascript:alert(1)">x</a>
+<a href="%2509javascript:alert(1)">x</a>
+<a href="%2520javascript:alert(1)">x</a>
+<a href="&#10;javascript:alert(1)">x</a>
+<a href="&#11;javascript:alert(1)">x</a>
+<a href="&#12;javascript:alert(1)">x</a>
+<a href="&#13;javascript:alert(1)">x</a>
+<a href="&#14;javascript:alert(1)">x</a>
+<a href="&#15;javascript:alert(1)">x</a>
+<a href="&#16;javascript:alert(1)">x</a>
+<a href="&#17;javascript:alert(1)">x</a>
+<a href="&#18;javascript:alert(1)">x</a>
+<a href="&#19;javascript:alert(1)">x</a>
+<a href="&#1;javascript:alert(1)">x</a>
+<a href="&#20;javascript:alert(1)">x</a>
+<a href="&#21;javascript:alert(1)">x</a>
+<a href="&#22;javascript:alert(1)">x</a>
+<a href="&#23;javascript:alert(1)">x</a>
+<a href="&#24;javascript:alert(1)">x</a>
+<a href="&#25;javascript:alert(1)">x</a>
+<a href="&#26;javascript:alert(1)">x</a>
+<a href="&#27;javascript:alert(1)">x</a>
+<a href="&#28;javascript:alert(1)">x</a>
+<a href="&#29;javascript:alert(1)">x</a>
+<a href="&#2;javascript:alert(1)">x</a>
+<a href="&#30;javascript:alert(1)">x</a>
+<a href="&#31;javascript:alert(1)">x</a>
+<a href="&#3;javascript:alert(1)">x</a>
+<a href="&#4;javascript:alert(1)">x</a>
+<a href="&#5;javascript:alert(1)">x</a>
+<a href="&#6;javascript:alert(1)">x</a>
+<a href="&#7;javascript:alert(1)">x</a>
+<a href="&#8;javascript:alert(1)">x</a>
+<a href="&#9;javascript:alert(1)">x</a>
+<a href="&#x10;javascript:alert(1)">x</a>
+<a href="&#x11;javascript:alert(1)">x</a>
+<a href="&#x12;javascript:alert(1)">x</a>
+<a href="&#x13;javascript:alert(1)">x</a>
+<a href="&#x14;javascript:alert(1)">x</a>
+<a href="&#x15;javascript:alert(1)">x</a>
+<a href="&#x16;javascript:alert(1)">x</a>
+<a href="&#x17;javascript:alert(1)">x</a>
+<a href="&#x18;javascript:alert(1)">x</a>
+<a href="&#x19;javascript:alert(1)">x</a>
+<a href="&#x1;javascript:alert(1)">x</a>
+<a href="&#x1a;javascript:alert(1)">x</a>
+<a href="&#x1b;javascript:alert(1)">x</a>
+<a href="&#x1c;javascript:alert(1)">x</a>
+<a href="&#x1d;javascript:alert(1)">x</a>
+<a href="&#x1e;javascript:alert(1)">x</a>
+<a href="&#x1f;javascript:alert(1)">x</a>
+<a href="&#x2;javascript:alert(1)">x</a>
+<a href="&#x3;javascript:alert(1)">x</a>
+<a href="&#x4;javascript:alert(1)">x</a>
+<a href="&#x5;javascript:alert(1)">x</a>
+<a href="&#x6;javascript:alert(1)">x</a>
+<a href="&#x7;javascript:alert(1)">x</a>
+<a href="&#x8;javascript:alert(1)">x</a>
+<a href="&#x9;javascript:alert(1)">x</a>
+<a href="&#xa;javascript:alert(1)">x</a>
+<a href="&#xb;javascript:alert(1)">x</a>
+<a href="&#xc;javascript:alert(1)">x</a>
+<a href="&#xd;javascript:alert(1)">x</a>
+<a href="&#xe;javascript:alert(1)">x</a>
+<a href="&#xf;javascript:alert(1)">x</a>
+<a href="&NewLine;javascript:alert(1)">x</a>
+<a href="&Tab;javascript:alert(1)">x</a>
+<a href="java	script:alert(1)">x</a>
+<a%20href="java%0Ascript:alert(1)">x</a>
+<a href="java&#00000000000009;script:alert(1)">x</a>
+<a href="java&#00000000000009script:alert(1)">x</a>
+<a href="java&#9;script:alert(1)">x</a>
+<a href="java&#9script:alert(1)">x</a>
+<a href="java&#x00000000000009;script:alert(1)">x</a>
+<a href="java&#x00000000000009script:alert(1)">x</a>
+<a href="java&#x9;script:alert(1)">x</a>
+<a href="java&#x9script:alert(1)">x</a>
+<a href="java&NewLine;script:alert(1)">x</a>
+<a href="java&Tab;script:alert(1)">x</a>
+<a href="javaScript:alert(1)">x</a>
+<a href="javascript&#58;alert(1)">x</a>
+<a href="javascript&#58alert(1)">x</a>
+<a href="javascript&#x3a-alert(1)">x</a>
+<a href="javascript&#x3a;alert(1)">x</a>
+<a href="javascript&colon;alert(1)">x</a>
+
+# context: iframe_src
+<iframe src='" srcdoc="<xss tabindex=1 autofocus onfocusin=alert(1)>"'></iframe>
