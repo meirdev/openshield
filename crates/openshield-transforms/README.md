@@ -31,6 +31,7 @@ let same = lowercase(b"already lowercase");               // borrowed
 | `remove_nulls`, `replace_nulls` | `t:removeNulls`, `t:replaceNulls` | |
 | `remove_whitespace`, `compress_whitespace` | `t:removeWhitespace`, `t:compressWhitespace` | C `isspace` set |
 | `replace_comments`, `remove_comments` | `t:replaceComments`, `t:removeComments` | ModSecurity's quirks kept |
+| `remove_comments_char` | `t:removeCommentsChar` | markers only, text between them kept |
 | `cmd_line` | `t:cmdLine` | |
 | `normalize_path`, `normalize_path_win` | `t:normalizePath`, `t:normalizePathWin` | |
 | `base64_encode`, `hex_encode` | `t:base64Encode`, `t:hexEncode` | |

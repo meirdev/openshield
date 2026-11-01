@@ -27,6 +27,7 @@ Transforms and detectors operate on strings, with `[*]` applying them to each el
 | `compress_whitespace(s)`                     | Each whitespace run collapsed to one space                                                                                      |
 | `replace_comments(s)`                        | Each `/* … */` replaced by one space                                                                                            |
 | `remove_comments(s)`                         | `/* … */` and `<!-- … -->` removed, and everything from `--` or `#` dropped                                                     |
+| `remove_comments_char(s)`                    | The comment markers `/*`, `*/`, `<!--`, `-->`, `--` and `#` removed, keeping the text between them                              |
 | `cmd_line(s)`                                | Command line normalized: `" ' \ ^` removed, `, ;` and whitespace collapsed to one space, no space before `/` or `(`, lowercased |
 | `normalize_path(s)`                          | Path with `//`, `.` and `..` resolved                                                                                           |
 | `normalize_path_win(s)`                      | Like `normalize_path`, also treating `\` as a separator                                                                         |

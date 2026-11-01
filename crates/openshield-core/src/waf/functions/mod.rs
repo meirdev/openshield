@@ -74,6 +74,11 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
     )
     .unwrap();
     b.add_function(
+        "remove_comments_char",
+        BytesTransformFunction::new("remove_comments_char", transforms::remove_comments_char),
+    )
+    .unwrap();
+    b.add_function(
         "cmd_line",
         BytesTransformFunction::new("cmd_line", transforms::cmd_line),
     )

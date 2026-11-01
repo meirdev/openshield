@@ -88,7 +88,10 @@ mod tests {
     fn md5_known_vector() {
         // RFC 1321 test vectors; the digest is raw bytes, not hex.
         assert_eq!(md5(b"abc").len(), 16);
-        assert_eq!(&*hex_encode(&md5(b"abc")), b"900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(
+            &*hex_encode(&md5(b"abc")),
+            b"900150983cd24fb0d6963f7d28e17f72"
+        );
         assert_eq!(&*hex_encode(&md5(b"")), b"d41d8cd98f00b204e9800998ecf8427e");
     }
 

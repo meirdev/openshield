@@ -174,6 +174,36 @@ pub fn remove_comments(input: &[u8]) -> Cow<'_, [u8]> {
     Cow::Owned(out)
 }
 
+/// ModSecurity `t:removeCommentsChar`: deletes the comment markers `/*`, `*/`,
+/// `<!--`, `-->`, `--` and `#`, keeping the text between them.
+pub fn remove_comments_char(input: &[u8]) -> Cow<'_, [u8]> {
+    // Every marker contains `#`, `/*`, `*/` or `--`.
+    let has_marker = input.contains(&b'#')
+        || find(input, b"/*").is_some()
+        || find(input, b"*/").is_some()
+        || find(input, b"--").is_some();
+    if !has_marker {
+        return Cow::Borrowed(input);
+    }
+    let mut out = Vec::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        // Order matters: `-->` before `--`.
+        i += match &input[i..] {
+            [b'/', b'*', ..] | [b'*', b'/', ..] => 2,
+            [b'<', b'!', b'-', b'-', ..] => 4,
+            [b'-', b'-', b'>', ..] => 3,
+            [b'-', b'-', ..] => 2,
+            [b'#', ..] => 1,
+            _ => {
+                out.push(input[i]);
+                1
+            }
+        };
+    }
+    Cow::Owned(out)
+}
+
 /// ModSecurity `t:cmdLine`: normalises an obfuscated command line.
 ///
 /// Deletes `" ' \ ^`, collapses runs of `, ; \t \r \n` and space into a single
@@ -367,6 +397,10 @@ mod tests {
         assert!(matches!(compress_whitespace(b"a  b"), Cow::Owned(_)));
         assert!(matches!(replace_comments(b"a*/b"), Cow::Borrowed(_)));
         assert!(matches!(remove_comments(b"plain"), Cow::Borrowed(_)));
+        assert!(matches!(
+            remove_comments_char(b"a-b*c/d<!e"),
+            Cow::Borrowed(_)
+        ));
         assert!(matches!(cmd_line(b"cat/etc/passwd"), Cow::Borrowed(_)));
         assert!(matches!(normalize_path(b"/a/b/c"), Cow::Borrowed(_)));
         assert!(matches!(normalize_path_win(b"a\\b"), Cow::Owned(_)));
@@ -457,6 +491,23 @@ mod tests {
         // Byte right after a close marker is copied through (here 'z').
         assert_eq!(&*remove_comments(b"/*c*/z/*d*/w"), b"zw");
         assert_eq!(&*remove_comments(b"no comments here"), b"no comments here");
+    }
+
+    #[test]
+    fn remove_comments_char_strips_markers_only() {
+        // Comment bodies are kept; only the markers go.
+        assert_eq!(&*remove_comments_char(b"UN/**/ION"), b"UNION");
+        assert_eq!(&*remove_comments_char(b"a/* c */b"), b"a c b");
+        assert_eq!(&*remove_comments_char(b"<!--x-->y"), b"xy");
+        assert_eq!(&*remove_comments_char(b"1--2#3"), b"123");
+        // `-->` wins over `--`; a lone `-`, `*`, `/` or `<!` is kept.
+        assert_eq!(&*remove_comments_char(b"a--->b"), b"a->b");
+        assert_eq!(&*remove_comments_char(b"a-b*c/d<!e"), b"a-b*c/d<!e");
+        // `<!-` without the second `-` keeps `<!`, then `-` stays as well.
+        assert_eq!(&*remove_comments_char(b"<!-x"), b"<!-x");
+        assert_eq!(&*remove_comments_char(b"/*/"), b"/");
+        assert_eq!(&*remove_comments_char(b"###"), b"");
+        assert_eq!(&*remove_comments_char(b""), b"");
     }
 
     #[test]
