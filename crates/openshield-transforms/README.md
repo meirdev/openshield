@@ -34,7 +34,7 @@ let same = lowercase(b"already lowercase");               // borrowed
 | `cmd_line` | `t:cmdLine` | |
 | `normalize_path`, `normalize_path_win` | `t:normalizePath`, `t:normalizePathWin` | |
 | `base64_encode`, `hex_encode` | `t:base64Encode`, `t:hexEncode` | |
-| `md5`, `sha1` | `t:md5`, `t:sha1` + `t:hexEncode` | lowercase hex digest; `hash` feature |
+| `md5`, `sha1` | `t:md5`, `t:sha1` | raw binary digest (16 and 20 bytes); `hash` feature |
 | `utf8_to_unicode` | `t:utf8toUnicode` | |
 
 Where ModSecurity's behaviour is surprising, for instance the byte copied

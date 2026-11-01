@@ -20,16 +20,16 @@ pub fn hex_encode(input: &[u8]) -> Cow<'_, [u8]> {
     Cow::Owned(hex::encode(input).into_bytes())
 }
 
-/// ModSecurity `t:md5` followed by `t:hexEncode`: the digest as lowercase hex.
+/// ModSecurity `t:md5`: the raw 16-byte digest. Chain `hex_encode` for hex.
 #[cfg(feature = "hash")]
 pub fn md5(input: &[u8]) -> Cow<'_, [u8]> {
-    Cow::Owned(hex::encode(md5::Md5::digest(input)).into_bytes())
+    Cow::Owned(md5::Md5::digest(input).to_vec())
 }
 
-/// ModSecurity `t:sha1` followed by `t:hexEncode`: the digest as lowercase hex.
+/// ModSecurity `t:sha1`: the raw 20-byte digest. Chain `hex_encode` for hex.
 #[cfg(feature = "hash")]
 pub fn sha1(input: &[u8]) -> Cow<'_, [u8]> {
-    Cow::Owned(hex::encode(sha1::Sha1::digest(input)).into_bytes())
+    Cow::Owned(sha1::Sha1::digest(input).to_vec())
 }
 
 /// ModSecurity `t:utf8toUnicode`: non-ASCII characters become `\uXXXX`.
@@ -86,16 +86,21 @@ mod tests {
     #[cfg(feature = "hash")]
     #[test]
     fn md5_known_vector() {
-        // RFC 1321 test vectors.
-        assert_eq!(&*md5(b"abc"), b"900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(&*md5(b""), b"d41d8cd98f00b204e9800998ecf8427e");
+        // RFC 1321 test vectors; the digest is raw bytes, not hex.
+        assert_eq!(md5(b"abc").len(), 16);
+        assert_eq!(&*hex_encode(&md5(b"abc")), b"900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(&*hex_encode(&md5(b"")), b"d41d8cd98f00b204e9800998ecf8427e");
     }
 
     #[cfg(feature = "hash")]
     #[test]
     fn sha1_known_vector() {
-        // RFC 3174 test vector for "abc".
-        assert_eq!(&*sha1(b"abc"), b"a9993e364706816aba3e25717850c26c9cd0d89d");
+        // RFC 3174 test vector for "abc"; the digest is raw bytes, not hex.
+        assert_eq!(sha1(b"abc").len(), 20);
+        assert_eq!(
+            &*hex_encode(&sha1(b"abc")),
+            b"a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
     }
 
     #[test]

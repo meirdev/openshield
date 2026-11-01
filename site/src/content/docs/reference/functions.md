@@ -20,7 +20,7 @@ Transforms and detectors operate on strings, with `[*]` applying them to each el
 | `escape_seq_decode(s)`                       | ANSI C escapes (`\n`, `\xHH`, octal…) decoded                                                                                   |
 | `base64_decode(s)`, `base64_encode(s)`       | Base64 decoding and encoding                                                                                                    |
 | `hex_decode(s)`, `hex_encode(s)`             | Hex decoding and encoding                                                                                                       |
-| `md5(s)`, `sha1(s)`                          | The hash as a hex string                                                                                                        |
+| `md5(s)`, `sha1(s)`                          | The raw binary digest; wrap in `hex_encode` for hex, e.g. `hex_encode(md5(s))`                                                  |
 | `utf8_to_unicode(s)`                         | Non-ASCII characters as `\uXXXX`                                                                                                |
 | `remove_nulls(s)`, `replace_nulls(s)`        | Null bytes removed, or replaced by spaces                                                                                       |
 | `remove_whitespace(s)`                       | Without any ASCII whitespace                                                                                                    |
