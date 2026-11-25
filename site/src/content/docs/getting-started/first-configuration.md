@@ -51,7 +51,7 @@ rulesets:
     rules:
       - id: block-sqli
         action: block
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
 ```
 
 The root ruleset runs automatically and blocks when any query argument triggers the detector. Validate the updated file and restart the proxy to apply it:
@@ -89,7 +89,7 @@ Replace the rule under `rules:` with this version:
 ```yaml
 - id: block-sqli
   action: block
-  expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+  expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
   action_parameters:
     response:
       status_code: 400

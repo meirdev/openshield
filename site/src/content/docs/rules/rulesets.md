@@ -61,11 +61,11 @@ rulesets:
       - id: sqli-args
         categories: [sqli]
         action: block
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
       - id: xss-args
         categories: [xss]
         action: block
-        expression: "any(detect_xss(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_xss(url_decode(http.request.uri.args.values[*])))"
 
   - name: main
     kind: root

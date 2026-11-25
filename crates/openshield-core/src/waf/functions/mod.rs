@@ -1,15 +1,17 @@
+mod decode;
 mod detect;
+mod encode;
 mod generic;
 pub mod helpers;
 mod json;
 mod jwt;
 mod regex;
+mod string;
 
 use std::sync::Arc;
 
 use helpers::{BytesPredicateFunction, BytesTransformFunction};
 pub use jwt::{PRESENT_FIELD, RuleCompiler, VALID_FIELD};
-use openshield_transforms as transforms;
 use wirefilter_engine::ConcatFunction;
 
 /// `token_ids` are the token configuration IDs the JWT functions accept.
@@ -18,81 +20,29 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
 
     // String transform functions (polymorphic: Bytes|Array<Bytes> ->
     // Bytes|Array<Bytes>)
+    b.add_function("lower", BytesTransformFunction::new("lower", string::lower))
+        .unwrap();
+    b.add_function("upper", BytesTransformFunction::new("upper", string::upper))
+        .unwrap();
+    b.add_function("trim", BytesTransformFunction::new("trim", string::trim))
+        .unwrap();
     b.add_function(
-        "lowercase",
-        BytesTransformFunction::new("lowercase", transforms::lowercase),
+        "trim_start",
+        BytesTransformFunction::new("trim_start", string::trim_start),
     )
     .unwrap();
     b.add_function(
-        "uppercase",
-        BytesTransformFunction::new("uppercase", transforms::uppercase),
+        "trim_end",
+        BytesTransformFunction::new("trim_end", string::trim_end),
     )
     .unwrap();
     b.add_function(
-        "trim",
-        BytesTransformFunction::new("trim", transforms::trim),
+        "remove_bytes",
+        BytesTransformFunction::with_required_literal("remove_bytes", string::remove_bytes),
     )
     .unwrap();
-    b.add_function(
-        "trim_left",
-        BytesTransformFunction::new("trim_left", transforms::trim_left),
-    )
-    .unwrap();
-    b.add_function(
-        "trim_right",
-        BytesTransformFunction::new("trim_right", transforms::trim_right),
-    )
-    .unwrap();
-    b.add_function(
-        "remove_nulls",
-        BytesTransformFunction::new("remove_nulls", transforms::remove_nulls),
-    )
-    .unwrap();
-    b.add_function(
-        "replace_nulls",
-        BytesTransformFunction::new("replace_nulls", transforms::replace_nulls),
-    )
-    .unwrap();
-    b.add_function(
-        "remove_whitespace",
-        BytesTransformFunction::new("remove_whitespace", transforms::remove_whitespace),
-    )
-    .unwrap();
-    b.add_function(
-        "compress_whitespace",
-        BytesTransformFunction::new("compress_whitespace", transforms::compress_whitespace),
-    )
-    .unwrap();
-    b.add_function(
-        "replace_comments",
-        BytesTransformFunction::new("replace_comments", transforms::replace_comments),
-    )
-    .unwrap();
-    b.add_function(
-        "remove_comments",
-        BytesTransformFunction::new("remove_comments", transforms::remove_comments),
-    )
-    .unwrap();
-    b.add_function(
-        "remove_comments_char",
-        BytesTransformFunction::new("remove_comments_char", transforms::remove_comments_char),
-    )
-    .unwrap();
-    b.add_function(
-        "cmd_line",
-        BytesTransformFunction::new("cmd_line", transforms::cmd_line),
-    )
-    .unwrap();
-    b.add_function(
-        "normalize_path",
-        BytesTransformFunction::new("normalize_path", transforms::normalize_path),
-    )
-    .unwrap();
-    b.add_function(
-        "normalize_path_win",
-        BytesTransformFunction::new("normalize_path_win", transforms::normalize_path_win),
-    )
-    .unwrap();
+    b.add_function("split", string::SplitFunction).unwrap();
+    b.add_function("join", string::JoinFunction).unwrap();
 
     // String functions (non-polymorphic)
     b.add_function("len", generic::LenFunction).unwrap();
@@ -116,64 +66,46 @@ pub fn register_all(b: &mut wirefilter_engine::SchemeBuilder, token_ids: &[Strin
 
     // Decoding functions (polymorphic)
     b.add_function(
-        "url_decode_uni",
-        BytesTransformFunction::new("url_decode_uni", transforms::url_decode_uni),
+        "url_decode",
+        BytesTransformFunction::with_optional_literal("url_decode", decode::url_decode_with),
     )
     .unwrap();
     b.add_function(
-        "base64_decode",
-        BytesTransformFunction::new("base64_decode", transforms::base64_decode),
+        "decode_base64",
+        BytesTransformFunction::new("decode_base64", decode::decode_base64),
     )
     .unwrap();
     b.add_function(
         "hex_decode",
-        BytesTransformFunction::new("hex_decode", transforms::hex_decode),
+        BytesTransformFunction::new("hex_decode", decode::hex_decode),
     )
     .unwrap();
     b.add_function(
         "html_entity_decode",
-        BytesTransformFunction::new("html_entity_decode", transforms::html_entity_decode),
-    )
-    .unwrap();
-    b.add_function(
-        "js_decode",
-        BytesTransformFunction::new("js_decode", transforms::js_decode),
-    )
-    .unwrap();
-    b.add_function(
-        "css_decode",
-        BytesTransformFunction::new("css_decode", transforms::css_decode),
-    )
-    .unwrap();
-    b.add_function(
-        "escape_seq_decode",
-        BytesTransformFunction::new("escape_seq_decode", transforms::escape_seq_decode),
+        BytesTransformFunction::new("html_entity_decode", decode::html_entity_decode),
     )
     .unwrap();
 
-    // Encoding functions (polymorphic)
+    // Encoding and hash functions (polymorphic)
     b.add_function(
-        "base64_encode",
-        BytesTransformFunction::new("base64_encode", transforms::base64_encode),
+        "encode_base64",
+        BytesTransformFunction::new("encode_base64", encode::encode_base64),
     )
     .unwrap();
     b.add_function(
         "hex_encode",
-        BytesTransformFunction::new("hex_encode", transforms::hex_encode),
+        BytesTransformFunction::new("hex_encode", encode::hex_encode),
     )
     .unwrap();
-    b.add_function("md5", BytesTransformFunction::new("md5", transforms::md5))
-        .unwrap();
-    b.add_function(
-        "sha1",
-        BytesTransformFunction::new("sha1", transforms::sha1),
-    )
-    .unwrap();
-    b.add_function(
-        "utf8_to_unicode",
-        BytesTransformFunction::new("utf8_to_unicode", transforms::utf8_to_unicode),
-    )
-    .unwrap();
+    for (name, digest) in [
+        ("md5", encode::md5 as helpers::BytesTransformFn),
+        ("sha1", encode::sha1),
+        ("sha256", encode::sha256),
+        ("sha512", encode::sha512),
+    ] {
+        b.add_function(name, BytesTransformFunction::new(name, digest))
+            .unwrap();
+    }
 
     // Security detection functions (polymorphic: Bytes|Array<Bytes> ->
     // Bool|Array<Bool>)
@@ -236,24 +168,24 @@ mod tests {
 
     #[test]
     fn transform_then_compare() {
-        // Polymorphic Bytes path: lowercase(field) applied before comparison.
-        assert!(eval_bytes(r#"lowercase(http.host) == "abc""#, HOST, b"ABC"));
+        // Polymorphic Bytes path: lower(field) applied before comparison.
+        assert!(eval_bytes(r#"lower(http.host) == "abc""#, HOST, b"ABC"));
         // A transform that changes nothing still compares correctly.
-        assert!(eval_bytes(r#"lowercase(http.host) == "abc""#, HOST, b"abc"));
+        assert!(eval_bytes(r#"lower(http.host) == "abc""#, HOST, b"abc"));
         assert!(eval_bytes(r#"trim(http.host) == "abc""#, HOST, b"  abc "));
     }
 
     #[test]
     fn transform_over_array() {
-        // Polymorphic Array path: lowercase() maps element-wise over the array,
+        // Polymorphic Array path: lower() maps element-wise over the array,
         // feeding its transformed array into detect_sqli's array path.
         assert!(eval_array(
-            "any(detect_sqli(lowercase(http.request.uri.args.values[*])))",
+            "any(detect_sqli(lower(http.request.uri.args.values[*])))",
             "http.request.uri.args.values",
             &[b"benign", b"1' OR '1'='1"],
         ));
         assert!(!eval_array(
-            "any(detect_sqli(lowercase(http.request.uri.args.values[*])))",
+            "any(detect_sqli(lower(http.request.uri.args.values[*])))",
             "http.request.uri.args.values",
             &[b"hello", b"world"],
         ));

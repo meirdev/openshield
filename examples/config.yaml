@@ -55,13 +55,13 @@ rulesets:
       - id: sqli-args
         categories: [sqli]
         action: score
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
         action_parameters:
           scores: [{name: sqli, increment: 10}]
       - id: xss-args
         categories: [xss]
         action: score
-        expression: "any(detect_xss(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_xss(url_decode(http.request.uri.args.values[*])))"
         action_parameters:
           scores: [{name: xss, increment: 10}]
 

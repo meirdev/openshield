@@ -51,7 +51,7 @@ any(http.request.cookies["session"][*] == "")
 `[*]` applies the rest of the expression to every element, and `any` or `all` folds the results. Functions apply element-wise too:
 
 ```text
-any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))
+any(detect_sqli(url_decode(http.request.uri.args.values[*])))
 all(len(http.request.headers.values[*])[*] < 4096)
 ```
 
@@ -59,10 +59,10 @@ Header lookups use lowercase names, while cookie and argument names retain their
 
 ## Functions
 
-Functions transform values (`lowercase`, `url_decode_uni`), detect attacks (`detect_sqli`, `detect_xss`), inspect strings (`starts_with`, `regex_capture`) and ask about detections (`is_jwt_valid`). Nest them freely:
+Functions transform values (`lower`, `url_decode`), detect attacks (`detect_sqli`, `detect_xss`), inspect strings (`starts_with`, `regex_capture`) and ask about detections (`is_jwt_valid`). Nest them freely:
 
 ```text
-detect_xss(html_entity_decode(url_decode_uni(http.request.uri.query)))
+detect_xss(html_entity_decode(url_decode(http.request.uri.query)))
 regex_capture(http.request.uri.path, "/item/(\\d+)")[1] == "42"
 lookup_json_string(http.request.body.raw, "user", "role") == "admin"
 ```

@@ -2,15 +2,23 @@ use std::borrow::Cow;
 use std::fmt;
 
 use wirefilter_engine::{
-    Array, Bytes, ExpectedType, FunctionArgs, FunctionDefinition, FunctionDefinitionContext,
-    FunctionParam, FunctionParamError, GetType, LhsValue, ParserSettings, SimpleFunctionArgKind,
-    SimpleFunctionDefinition, SimpleFunctionImpl, SimpleFunctionParam, Type,
+    Array, Bytes, BytesExpr, ExpectedType, FunctionArgs, FunctionDefinition,
+    FunctionDefinitionContext, FunctionParam, FunctionParamError, GetType, LhsValue, LiteralValue,
+    ParserSettings, SimpleFunctionArgKind, SimpleFunctionDefinition, SimpleFunctionImpl,
+    SimpleFunctionParam, Type,
 };
 
 pub type FnImpl = for<'a> fn(FunctionArgs<'_, 'a>) -> Option<LhsValue<'a>>;
 
 /// Core transform: borrowed when the input needed no change.
 pub type BytesTransformFn = for<'a> fn(&'a [u8]) -> Cow<'a, [u8]>;
+
+/// A transform configured by the function's literal argument.
+pub type Transform = Box<dyn for<'a> Fn(&'a [u8]) -> Cow<'a, [u8]> + Send + Sync>;
+
+/// Builds a [`Transform`] from the literal argument (`None` when an optional
+/// one is omitted). An error rejects the rule at parse time.
+pub type TransformBuilder = fn(Option<&[u8]>) -> Result<Transform, String>;
 
 /// Core predicate: &[u8] -> bool
 pub type BytesPredicateFn = fn(&[u8]) -> bool;
@@ -40,7 +48,7 @@ pub fn bytes_bytes_to_bool(f: FnImpl) -> SimpleFunctionDefinition {
 
 /// Applies `transform` without copying when the value is borrowed from the
 /// request and the transform leaves it alone.
-fn apply(transform: BytesTransformFn, value: Bytes<'_>) -> Bytes<'_> {
+fn apply<'v>(transform: &dyn for<'a> Fn(&'a [u8]) -> Cow<'a, [u8]>, value: Bytes<'v>) -> Bytes<'v> {
     match value {
         Bytes::Borrowed(slice) => transform(slice).into(),
         Bytes::Owned(owned) => {
@@ -57,16 +65,51 @@ fn apply(transform: BytesTransformFn, value: Bytes<'_>) -> Bytes<'_> {
     }
 }
 
+enum TransformKind {
+    Plain(BytesTransformFn),
+    /// `required` is false for an optional trailing literal.
+    WithLiteral {
+        required: bool,
+        build: TransformBuilder,
+    },
+}
+
 /// Bytes|Array<Bytes> -> Bytes|Array<Bytes>
-/// Applies a byte transform to a single value or each element of an array.
+/// Applies a byte transform to a single value or each element of an array,
+/// optionally configured by one string literal (`url_decode(s, "r")`).
 pub struct BytesTransformFunction {
     name: &'static str,
-    transform: BytesTransformFn,
+    kind: TransformKind,
 }
 
 impl BytesTransformFunction {
     pub const fn new(name: &'static str, transform: BytesTransformFn) -> Self {
-        Self { name, transform }
+        Self {
+            name,
+            kind: TransformKind::Plain(transform),
+        }
+    }
+
+    /// A transform with an optional string literal argument.
+    pub const fn with_optional_literal(name: &'static str, build: TransformBuilder) -> Self {
+        Self {
+            name,
+            kind: TransformKind::WithLiteral {
+                required: false,
+                build,
+            },
+        }
+    }
+
+    /// A transform with a required string literal argument.
+    pub const fn with_required_literal(name: &'static str, build: TransformBuilder) -> Self {
+        Self {
+            name,
+            kind: TransformKind::WithLiteral {
+                required: true,
+                build,
+            },
+        }
     }
 }
 
@@ -80,15 +123,21 @@ impl FunctionDefinition for BytesTransformFunction {
     fn check_param(
         &self,
         _: &ParserSettings,
-        _params: &mut dyn ExactSizeIterator<Item = FunctionParam<'_>>,
+        params: &mut dyn ExactSizeIterator<Item = FunctionParam<'_>>,
         next_param: &FunctionParam<'_>,
         _: Option<&mut FunctionDefinitionContext>,
     ) -> Result<(), FunctionParamError> {
-        next_param.expect_val_type(
-            [ExpectedType::Type(Type::Bytes), ExpectedType::Array]
-                .iter()
-                .cloned(),
-        )
+        match (params.len(), &self.kind) {
+            (0, _) => next_param.expect_val_type(
+                [ExpectedType::Type(Type::Bytes), ExpectedType::Array]
+                    .iter()
+                    .cloned(),
+            ),
+            (1, TransformKind::WithLiteral { build, .. }) => {
+                next_param.expect_const_value::<&BytesExpr, _>(|lit| build(Some(lit)).map(|_| ()))
+            }
+            _ => unreachable!("arg_count bounds the parameters"),
+        }
     }
 
     fn return_type(
@@ -103,26 +152,42 @@ impl FunctionDefinition for BytesTransformFunction {
     }
 
     fn arg_count(&self) -> (usize, Option<usize>) {
-        (1, Some(0))
+        match self.kind {
+            TransformKind::Plain(_) => (1, Some(0)),
+            TransformKind::WithLiteral { required: true, .. } => (2, Some(0)),
+            TransformKind::WithLiteral {
+                required: false, ..
+            } => (1, Some(1)),
+        }
     }
 
     fn compile(
         &self,
-        _: &mut dyn ExactSizeIterator<Item = FunctionParam<'_>>,
+        params: &mut dyn ExactSizeIterator<Item = FunctionParam<'_>>,
         _: Option<FunctionDefinitionContext>,
     ) -> Box<dyn for<'i, 'a> Fn(FunctionArgs<'i, 'a>) -> Option<LhsValue<'a>> + Sync + Send + 'static>
     {
-        let transform = self.transform;
+        let _source = params.next();
+        let transform: Transform = match self.kind {
+            TransformKind::Plain(f) => Box::new(f),
+            TransformKind::WithLiteral { build, .. } => {
+                let literal = params.next().map(|p| match p {
+                    FunctionParam::Constant(LiteralValue::Bytes(b)) => b[..].to_vec(),
+                    _ => unreachable!("validated in check_param"),
+                });
+                build(literal.as_deref()).expect("validated in check_param")
+            }
+        };
         Box::new(move |args| {
             let arg = args.next()?.ok()?;
             match arg {
-                LhsValue::Bytes(b) => Some(LhsValue::Bytes(apply(transform, b))),
+                LhsValue::Bytes(b) => Some(LhsValue::Bytes(apply(&transform, b))),
                 LhsValue::Array(arr) => {
                     let out: Vec<LhsValue<'_>> = arr
                         .into_iter()
                         .map(|item| {
                             if let LhsValue::Bytes(b) = item {
-                                LhsValue::Bytes(apply(transform, b))
+                                LhsValue::Bytes(apply(&transform, b))
                             } else {
                                 item.into_owned()
                             }
