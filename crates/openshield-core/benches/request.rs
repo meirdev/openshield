@@ -65,15 +65,15 @@ rulesets:
     rules:
       - id: sqli-args
         action: score
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
         action_parameters: {scores: [{name: sqli, increment: 10}]}
       - id: xss-args
         action: score
-        expression: "any(detect_xss(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_xss(url_decode(http.request.uri.args.values[*])))"
         action_parameters: {scores: [{name: xss, increment: 10}]}
       - id: sqli-cookies
         action: score
-        expression: "any(detect_sqli(url_decode_uni(http.request.cookies.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.cookies.values[*])))"
         action_parameters: {scores: [{name: sqli, increment: 5}]}
       - id: sqli-ua
         action: score
@@ -93,7 +93,7 @@ rulesets:
         expression: 'starts_with(http.request.uri.path, "/admin/") and not ip.src in $office'
       - id: no-php
         action: block
-        expression: 'lowercase(http.request.uri.path) matches "\\.(php|asp|jsp)$"'
+        expression: 'lower(http.request.uri.path) matches "\\.(php|asp|jsp)$"'
       - id: login-rate-limit
         action: block
         expression: 'http.request.method == "POST" and http.request.uri.path == "/login"'
@@ -721,19 +721,19 @@ fn expressions(c: &mut Criterion) {
         ("ua_substring_list", "http.user_agent in $scanner_ua"),
         (
             "lower_matches",
-            r#"lowercase(http.request.uri.path) matches "\.(php|asp|jsp)$""#,
+            r#"lower(http.request.uri.path) matches "\.(php|asp|jsp)$""#,
         ),
         (
             "sqli_args",
-            "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))",
+            "any(detect_sqli(url_decode(http.request.uri.args.values[*])))",
         ),
         (
             "xss_args",
-            "any(detect_xss(url_decode_uni(http.request.uri.args.values[*])))",
+            "any(detect_xss(url_decode(http.request.uri.args.values[*])))",
         ),
         (
             "sqli_cookies",
-            "any(detect_sqli(url_decode_uni(http.request.cookies.values[*])))",
+            "any(detect_sqli(url_decode(http.request.cookies.values[*])))",
         ),
         (
             "header_lookup",
@@ -760,7 +760,7 @@ fn expressions(c: &mut Criterion) {
         // Two owned copies of every value, although neither transform changes them.
         (
             "transform_chain_args",
-            r#"any(url_decode_uni(lowercase(http.request.uri.args.values))[*] == "zzz")"#,
+            r#"any(url_decode(lower(http.request.uri.args.values))[*] == "zzz")"#,
         ),
     ];
     let mut group = c.benchmark_group("expression");

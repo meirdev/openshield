@@ -18,12 +18,12 @@ rulesets:
     rules:
       - id: sqli-args
         action: score
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
         action_parameters:
           scores: [{ name: sqli, increment: 10 }]
       - id: sqli-cookies
         action: score
-        expression: "any(detect_sqli(url_decode_uni(http.request.cookies.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.cookies.values[*])))"
         action_parameters:
           scores: [{ name: sqli, increment: 5 }]
 

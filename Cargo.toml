@@ -4,7 +4,6 @@ members = [
     "crates/openshield-openapi",
     "crates/openshield-core",
     "crates/openshield-injection",
-    "crates/openshield-transforms",
     "crates/openshield-pingora",
     "crates/openshield-nginx",
 ]
@@ -15,7 +14,6 @@ default-members = [
     "crates/openshield-openapi",
     "crates/openshield-core",
     "crates/openshield-injection",
-    "crates/openshield-transforms",
     "crates/openshield-pingora",
 ]
 
@@ -27,7 +25,6 @@ edition = "2024"
 openshield-openapi = { path = "crates/openshield-openapi" }
 openshield-core = { path = "crates/openshield-core" }
 openshield-injection = { path = "crates/openshield-injection" }
-openshield-transforms = { path = "crates/openshield-transforms" }
 
 wirefilter-engine = { git = "https://github.com/cloudflare/wirefilter.git", branch = "master", package = "wirefilter-engine" }
 serde = { version = "1", features = ["derive"] }
@@ -60,6 +57,7 @@ pingora-limits = "0.9.0"
 pingora-prometheus = "0.9.0"
 uuid = { version = "1.23.0", features = ["v4"] }
 sha1 = "0.11.0"
+sha2 = "0.11.0"
 html-escape = "0.2.13"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json", "form"] }
 hex = "0.4.3"

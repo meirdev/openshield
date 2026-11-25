@@ -18,7 +18,7 @@ rulesets:
     rules:
       - id: block-sqli
         action: block
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
 ```
 
 Added to a proxy configuration with `listen` and `upstream`, this rule blocks when any decoded query argument triggers SQL injection detection. The query **field** supplies the values, the **functions** decode and inspect them, and the **expression** combines the results into a match. The `block` **action** determines what happens next.

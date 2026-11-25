@@ -40,7 +40,7 @@ rulesets:
     rules:
       - id: block-sqli
         action: block
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
 ```
 
 Check the configuration, then start the proxy:

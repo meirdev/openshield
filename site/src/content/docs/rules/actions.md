@@ -38,7 +38,7 @@ Use a valid HTTP status code in a request phase. In `response_body`, only `conte
 ```yaml
 - id: sqli-args
   action: score
-  expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+  expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
   action_parameters:
     scores:
       - name: sqli

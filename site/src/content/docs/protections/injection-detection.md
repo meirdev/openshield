@@ -8,8 +8,8 @@ sidebar:
 `detect_sqli` follows [libinjection](https://github.com/libinjection/libinjection)'s method: it tokenizes the string as SQL in the contexts a query could splice it into (bare, or inside a single- or double-quoted string), folds the tokens down to their structure and looks the resulting fingerprint up in a database of shapes seen in attacks. `detect_xss` uses OpenShield's own detector: it tokenizes the string as HTML in every context a page could reflect it into (text, or inside an attribute value with any quoting) and flags markup that would execute, such as script-bearing tags, event handler attributes, `javascript:` URLs, executable style constructs and dangling-markup exfiltration. It does not flag inline styles or unknown tags on their own. Use `[*]` to check each array element:
 
 ```text
-any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))
-any(detect_xss(url_decode_uni(http.request.body.form.values[*])))
+any(detect_sqli(url_decode(http.request.uri.args.values[*])))
+any(detect_xss(url_decode(http.request.body.form.values[*])))
 detect_sqli(lookup_json_string(http.request.body.raw, "query"))
 ```
 
@@ -17,16 +17,16 @@ detect_sqli(lookup_json_string(http.request.body.raw, "query"))
 
 Attackers encode payloads so a naive filter does not see them. Apply the transforms the application will apply, innermost first:
 
-| Transform                                                                      | Undoes                                                         |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `url_decode_uni`                                                               | Percent-encoding, including `%uXXXX`                           |
-| `html_entity_decode`                                                           | `&lt;`, `&#x3c;` and friends                                   |
-| `base64_decode`, `hex_decode`                                                  | Encoded parameters                                             |
-| `lowercase`                                                                        | Case variations                                                |
-| `compress_whitespace`, `remove_whitespace`, `replace_comments`, `remove_nulls` | Padding, `/**/` comments and null bytes used to split keywords |
+| Transform                                   | Undoes                                                   |
+| ------------------------------------------- | -------------------------------------------------------- |
+| `url_decode`, `url_decode(s, "ur")`         | Percent-encoding; `u` adds `%uXXXX`, `r` double encoding |
+| `html_entity_decode`                        | `&lt;`, `&#x3c;` and friends                             |
+| `decode_base64`, `hex_decode`               | Encoded parameters                                       |
+| `lower`                                     | Case variations                                          |
+| `remove_bytes`, `regex_replace`             | Null bytes, padding and `/**/` comments used to split keywords, e.g. `regex_replace(s, "/\\*.*?\\*/", " ")` |
 
 ```text
-detect_xss(html_entity_decode(url_decode_uni(http.request.uri.query)))
+detect_xss(html_entity_decode(url_decode(http.request.uri.query)))
 ```
 
 Query arguments and form fields are already decoded once when they are parsed into maps; decoding again handles double encoding.
@@ -54,7 +54,7 @@ rulesets:
     rules:
       - id: sqli-args
         action: score
-        expression: "any(detect_sqli(url_decode_uni(http.request.uri.args.values[*])))"
+        expression: "any(detect_sqli(url_decode(http.request.uri.args.values[*])))"
         action_parameters: { scores: [{ name: sqli, increment: 10 }] }
       - id: sqli-ua
         action: score
