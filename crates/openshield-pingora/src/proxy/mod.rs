@@ -274,8 +274,12 @@ impl ProxyHttp for ReverseProxyHandler {
         Self::CTX: Send + Sync,
     {
         // A body-phase rule asked to block: render the configured block
-        // response.
+        // response. The connection is not reused after a failure, so say so
+        // (`Connection: close`) before the header is written, as pingora's
+        // own `respond_error` does; otherwise the client may pool it and
+        // send its next request into a closed socket.
         if let Some(intervention) = ctx.pending_block.take() {
+            session.set_keepalive(None);
             send_block_response(session, &intervention).await;
             return pingora::proxy::FailToProxy {
                 error_code: intervention.status_code,

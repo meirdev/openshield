@@ -258,11 +258,12 @@ impl FunctionDefinition for ExceptFunction {
             let LhsValue::Map(map) = args.next()?.ok()? else {
                 return None;
             };
+            let value_type = map.value_type();
             let kept = map
-                .iter()
+                .into_iter()
                 .filter(|(key, _)| !excluded.iter().any(|m| m.matches(key)))
-                .map(|(key, value)| Ok::<_, TypeMismatchError>((Box::from(key), value.clone())));
-            Map::try_from_iter(map.value_type(), kept)
+                .map(Ok::<_, TypeMismatchError>);
+            Map::try_from_iter(value_type, kept)
                 .ok()
                 .map(LhsValue::Map)
         })

@@ -1,5 +1,5 @@
 use serde_json::Value;
-use wirefilter_engine::{ExecutionContext, Scheme, TypedArray, TypedMap};
+use wirefilter_engine::{Bytes as WfBytes, ExecutionContext, Scheme, TypedArray, TypedMap};
 
 use super::{owned_array, set_field};
 use crate::waf::functions::{PRESENT_FIELD, VALID_FIELD};
@@ -45,8 +45,8 @@ fn ids<T>(entries: &[(&str, Vec<T>)]) -> Vec<String> {
     entries.iter().map(|(id, _)| id.to_string()).collect()
 }
 
-fn key(id: &str) -> Box<[u8]> {
-    id.as_bytes().into()
+fn key(id: &str) -> WfBytes<'static> {
+    WfBytes::from(id.as_bytes().to_vec())
 }
 
 pub fn jwt_fields(
