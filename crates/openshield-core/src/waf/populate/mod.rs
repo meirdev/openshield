@@ -76,7 +76,7 @@ pub fn owned_map_of_arrays<K: AsRef<str>, V: AsRef<str>>(
     for (k, values) in groups {
         let arr: TypedArray<'static, WfBytes<'static>> =
             TypedArray::from_iter(values.into_iter().map(WfBytes::from));
-        map.insert(k.into_bytes().into_boxed_slice(), arr);
+        map.insert(WfBytes::from(k.into_bytes()), arr);
     }
     map
 }

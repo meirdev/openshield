@@ -26,7 +26,7 @@ pub type BytesPredicateFn = fn(&[u8]) -> bool;
 /// (Bytes field, Bytes literal) -> Bool
 pub fn bytes_bytes_to_bool(f: FnImpl) -> SimpleFunctionDefinition {
     SimpleFunctionDefinition {
-        params: vec![
+        params: Box::new([
             SimpleFunctionParam {
                 arg_kind: SimpleFunctionArgKind::Field,
                 val_type: Type::Bytes,
@@ -35,8 +35,8 @@ pub fn bytes_bytes_to_bool(f: FnImpl) -> SimpleFunctionDefinition {
                 arg_kind: SimpleFunctionArgKind::Literal,
                 val_type: Type::Bytes,
             },
-        ],
-        opt_params: vec![],
+        ]),
+        opt_params: Box::new([]),
         return_type: Type::Bool,
         implementation: SimpleFunctionImpl::new(f),
     }
