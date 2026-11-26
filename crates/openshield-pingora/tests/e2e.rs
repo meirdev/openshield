@@ -156,6 +156,61 @@ fn token() -> String {
     encode(&header, &claims, &EncodingKey::from_secret(JWT_SECRET)).unwrap()
 }
 
+/// Reads one response (status line, headers, `Content-Length` body) and
+/// returns the status line and the `Connection` header, lowercased. `None`
+/// when the server closed the connection instead of answering.
+fn read_response(reader: &mut BufReader<TcpStream>) -> Option<(String, String)> {
+    let mut status = String::new();
+    if reader.read_line(&mut status).ok()? == 0 {
+        return None;
+    }
+    let (mut connection, mut length) = (String::new(), 0);
+    loop {
+        let mut line = String::new();
+        reader.read_line(&mut line).ok()?;
+        let line = line.trim_end();
+        if line.is_empty() {
+            break;
+        }
+        let (name, value) = line.split_once(':')?;
+        match name.trim().to_ascii_lowercase().as_str() {
+            "connection" => connection = value.trim().to_ascii_lowercase(),
+            "content-length" => length = value.trim().parse().ok()?,
+            _ => {}
+        }
+    }
+    reader.read_exact(&mut vec![0; length]).ok()?;
+    Some((status.trim_end().to_string(), connection))
+}
+
+/// Sends `path` on a raw connection. If the response advertises keep-alive,
+/// the connection must really stay usable: a client that pools it would
+/// otherwise send its next request into a closed socket.
+fn assert_keepalive_honest(proxy: &Proxy, what: &str, path: &str) {
+    let addr = proxy.url.trim_start_matches("http://");
+    let stream = TcpStream::connect(addr).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut writer = stream.try_clone().unwrap();
+    let mut reader = BufReader::new(stream);
+    let request = |path: &str| format!("GET {path} HTTP/1.1\r\nHost: example.com\r\n\r\n");
+
+    writer.write_all(request(path).as_bytes()).unwrap();
+    let (status, connection) =
+        read_response(&mut reader).unwrap_or_else(|| panic!("{what}: no response"));
+    if connection == "close" {
+        return;
+    }
+    // A write may still land in the kernel buffer of a closing socket; the
+    // missing response is what shows the connection was not kept alive.
+    let _ = writer.write_all(request("/").as_bytes());
+    assert!(
+        read_response(&mut reader).is_some(),
+        "{what}: {status} said `Connection: {connection}` but the proxy closed the connection"
+    );
+}
+
 /// Sends `request` and checks the status and that the body contains
 /// `body_contains`: the configured message for blocked requests, part of
 /// the upstream's echo for forwarded ones.
@@ -201,6 +256,14 @@ async fn example_configuration_end_to_end() {
         "injection detected",
     )
     .await;
+    // Blocked in the request_body phase, where pingora drops the connection
+    // afterwards.
+    assert_keepalive_honest(&proxy, "sqli in query", "/search?q=1'%20OR%20'1'='1");
+    // Blocked in the request_headers phase, where the connection is kept
+    // alive, and forwarded.
+    assert_keepalive_honest(&proxy, "private api without token", "/api/private/profile");
+    assert_keepalive_honest(&proxy, "plain request", "/");
+
     expect(
         "xss in query",
         client.get(url("/search?q=<script>alert(1)</script>")),
